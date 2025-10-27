@@ -7,12 +7,14 @@
 var app = require('../app');
 var debug = require('debug')('api:server');
 var http = require('http');
+const Database = require("../db/Database");
+const config = require("../config");
 
 /**
  * Get port from environment and store in Express.
  */
 
-var port = normalizePort(process.env.PORT || '3000');
+var port = normalizePort(process.env.PORT);
 app.set('port', port);
 
 /**
@@ -87,4 +89,8 @@ function onListening() {
     ? 'pipe ' + addr
     : 'port ' + addr.port;
   debug('Listening on ' + bind);
+
+  // Connect to Database
+  const db = new Database();
+  db.connect(config.DB);
 }
