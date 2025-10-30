@@ -1,24 +1,49 @@
-import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { useState, useEffect, useCallback } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { useCart } from "../context/CartContext";
 
 const API_BASE_URL = "http://localhost:3000/products";
 
 export default function ProductsPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const { addToCart } = useCart();
   const [addingToCart, setAddingToCart] = useState(null);
-
+  const [searchTerm, setSearchTerm] = useState(searchParams.get("q") || "");
+  const [searchInput, setSearchInput] = useState(searchParams.get("q") || "");
+  const [sortBy, setSortBy] = useState(""); // "price_asc", "price_desc", "popularity"
+  
+  // Update search term when URL changes (from Navbar)
   useEffect(() => {
-    fetchProducts();
-  }, []);
+    const urlSearchTerm = searchParams.get("q") || "";
+    if (urlSearchTerm !== searchTerm) {
+      setSearchTerm(urlSearchTerm);
+      setSearchInput(urlSearchTerm);
+    }
+  }, [searchParams]);
+  
+  // Update URL when search term changes
+  useEffect(() => {
+    if (searchTerm) {
+      setSearchParams({ q: searchTerm }, { replace: true });
+    } else {
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchTerm, setSearchParams]);
 
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await fetch(API_BASE_URL);
+      
+      // Build query parameters
+      const params = new URLSearchParams();
+      if (searchTerm) {
+        params.append('search', searchTerm);
+      }
+      
+      const response = await fetch(`${API_BASE_URL}?${params.toString()}`);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -27,7 +52,18 @@ export default function ProductsPage() {
       const data = await response.json();
       
       if (data.success && data.data && data.data.products) {
-        setProducts(data.data.products);
+        let filteredProducts = data.data.products;
+        
+        // Apply sorting
+        if (sortBy === "price_asc") {
+          filteredProducts = [...filteredProducts].sort((a, b) => a.price - b.price);
+        } else if (sortBy === "price_desc") {
+          filteredProducts = [...filteredProducts].sort((a, b) => b.price - a.price);
+        } else if (sortBy === "popularity") {
+          filteredProducts = [...filteredProducts].sort((a, b) => b.popularity_score - a.popularity_score);
+        }
+        
+        setProducts(filteredProducts);
       } else {
         throw new Error("Invalid response format");
       }
@@ -36,6 +72,24 @@ export default function ProductsPage() {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  }, [searchTerm, sortBy]);
+
+  useEffect(() => {
+    fetchProducts();
+  }, [fetchProducts]);
+
+  // Trigger search only on Enter or search button click
+  const handleSearchSubmit = (e) => {
+    if (e) e.preventDefault();
+    if (searchInput !== searchTerm) {
+      setSearchTerm(searchInput);
+    }
+  };
+
+  const handleSearchKeyPress = (e) => {
+    if (e.key === 'Enter') {
+      handleSearchSubmit(e);
     }
   };
 
@@ -88,6 +142,52 @@ export default function ProductsPage() {
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-gray-900 mb-2">All Products</h1>
           <p className="text-gray-600">Explore our complete product catalog</p>
+        </div>
+
+        {/* Search and Filter Bar */}
+        <div className="mb-8 flex flex-col md:flex-row gap-4">
+          {/* Search Input */}
+          <div className="flex-1 relative">
+            <input
+              type="text"
+              placeholder="Search products by name or description..."
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              onKeyPress={handleSearchKeyPress}
+              className="w-full px-4 py-3 pl-12 pr-10 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+            />
+            <svg
+              className="absolute left-4 top-3.5 w-5 h-5 text-gray-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <button
+              onClick={handleSearchSubmit}
+              className="absolute right-2 top-2.5 p-2 rounded-md text-gray-500 hover:text-primary hover:bg-gray-50 transition-colors"
+              aria-label="Search"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Sort Dropdown */}
+          <div className="md:w-64">
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="w-full px-4 py-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent bg-white"
+            >
+              <option value="">Sort by...</option>
+              <option value="price_asc">Price: Low to High</option>
+              <option value="price_desc">Price: High to Low</option>
+              <option value="popularity">Popularity</option>
+            </select>
+          </div>
         </div>
 
         {/* Products Count */}
@@ -187,11 +287,6 @@ export default function ProductsPage() {
                     <span className="text-2xl font-bold text-gray-900">
                       ${product.price ? product.price.toFixed(2) : "0.00"}
                     </span>
-                    {product.cost && (
-                      <span className="text-xs text-gray-500 ml-2">
-                        (Cost: ${product.cost.toFixed(2)})
-                      </span>
-                    )}
                   </div>
 
                   {/* Add to Cart Button */}
