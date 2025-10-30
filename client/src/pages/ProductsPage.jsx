@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
+import { useCart } from "../context/CartContext";
 
 const API_BASE_URL = "http://localhost:3000/products";
 
@@ -7,6 +8,8 @@ export default function ProductsPage() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const { addToCart } = useCart();
+  const [addingToCart, setAddingToCart] = useState(null);
 
   useEffect(() => {
     fetchProducts();
@@ -34,6 +37,19 @@ export default function ProductsPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleAddToCart = async (productId, productName) => {
+    setAddingToCart(productId);
+    const result = await addToCart(productId, 1);
+    
+    if (result.success) {
+      alert(`${productName} added to cart!`);
+    } else {
+      alert(`Error: ${result.error}`);
+    }
+    
+    setAddingToCart(null);
   };
 
   if (loading) {
@@ -180,14 +196,20 @@ export default function ProductsPage() {
 
                   {/* Add to Cart Button */}
                   <button
-                    disabled={product.quantity === 0}
+                    disabled={product.quantity === 0 || addingToCart === product._id}
+                    onClick={() => handleAddToCart(product._id, product.name)}
                     className={`w-full py-2.5 font-semibold rounded-lg transition-colors ${
-                      product.quantity === 0
+                      product.quantity === 0 || addingToCart === product._id
                         ? "bg-gray-300 text-gray-500 cursor-not-allowed"
                         : "bg-gray-900 text-white hover:bg-primary"
                     }`}
                   >
-                    {product.quantity === 0 ? "Out of Stock" : "Add to Cart"}
+                    {addingToCart === product._id 
+                      ? "Adding..." 
+                      : product.quantity === 0 
+                        ? "Out of Stock" 
+                        : "Add to Cart"
+                    }
                   </button>
                 </div>
               </div>
