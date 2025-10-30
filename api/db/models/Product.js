@@ -11,7 +11,14 @@ const schema = mongoose.Schema({
     },
     serial_number: {
         type: String,
-        unique: true
+        trim: true,
+        unique: true,
+        sparse: true, // Allow null values but ensure uniqueness when present
+        set: v => {
+            if (v === null || v === undefined) return v;
+            const t = String(v).trim();
+            return t.length ? t : undefined;
+        }
     },
     description: {
         type: String,
@@ -79,7 +86,7 @@ schema.index({ name: 1 });
 schema.index({ category: 1 });
 schema.index({ price: 1 });
 schema.index({ popularity_score: -1 });
-schema.index({ serial_number: 1 });
+// Note: serial_number index is automatically created by unique:true in schema
 
 class Product extends mongoose.Model {
     static searchByNameOrDescription(query) {
