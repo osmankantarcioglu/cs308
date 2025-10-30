@@ -6,6 +6,7 @@ import FeaturedProducts from "./components/FeaturedProducts";
 import DealsSection from "./components/DealsSection";
 import Footer from "./components/Footer";
 import BasketPage from "./pages/BasketPage";
+import ProductsPage from "./pages/ProductsPage";
 
 export default function App() {
   return (
@@ -23,6 +24,7 @@ export default function App() {
             </main>
           }
         />
+        <Route path="/products" element={<ProductsPage />} />
         <Route path="/basket" element={<BasketPage />} />
       </Routes>
       <Footer />
