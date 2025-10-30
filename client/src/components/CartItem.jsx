@@ -1,4 +1,7 @@
 export default function CartItem({ item, onUpdateQuantity, onRemove }) {
+  const maxQuantity = item.stock || 999; // Use stock or default to 999 if not available
+  const canIncrease = item.quantity < maxQuantity;
+  
   return (
     <div className="flex gap-4 p-4 bg-white rounded-lg border border-gray-200 hover:shadow-md transition-shadow">
       {/* Product Image */}
@@ -22,7 +25,7 @@ export default function CartItem({ item, onUpdateQuantity, onRemove }) {
           <div className="flex items-center gap-2">
             <button
               onClick={() => onUpdateQuantity(item.id, item.quantity - 1)}
-              className="w-8 h-8 flex items-center justify-center rounded-md border border-gray-300 hover:bg-gray-100 transition-colors"
+              className="w-8 h-8 flex items-center justify-center rounded-md border border-gray-300 hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={item.quantity <= 1}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -32,7 +35,8 @@ export default function CartItem({ item, onUpdateQuantity, onRemove }) {
             <span className="w-12 text-center font-medium">{item.quantity}</span>
             <button
               onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
-              className="w-8 h-8 flex items-center justify-center rounded-md border border-gray-300 hover:bg-gray-100 transition-colors"
+              className="w-8 h-8 flex items-center justify-center rounded-md border border-gray-300 hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={!canIncrease}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />

@@ -1,50 +1,58 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
+import { useCart } from "../context/CartContext";
 import CartItem from "../components/CartItem";
 import OrderSummary from "../components/OrderSummary";
 
-// Mock cart data - In real app, this would come from state management or API
-const initialCartItems = [
-  {
-    id: 1,
-    name: "MacBook Pro 16\"",
-    category: "Laptops",
-    price: 2499,
-    quantity: 1,
-    image: "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=300&q=80",
-  },
-  {
-    id: 2,
-    name: "Sony WH-1000XM5",
-    category: "Headphones",
-    price: 399,
-    quantity: 2,
-    image: "https://images.unsplash.com/photo-1618366712010-f4ae9c647dcb?w=300&q=80",
-  },
-  {
-    id: 3,
-    name: "iPad Pro 12.9\"",
-    category: "Tablets",
-    price: 1099,
-    quantity: 1,
-    image: "https://images.unsplash.com/photo-1544244015-0df4b3ffc6b0?w=300&q=80",
-  },
-];
-
 export default function BasketPage() {
-  const [cartItems, setCartItems] = useState(initialCartItems);
+  const { cartItems, cartTotal, updateQuantity, removeFromCart, clearCart } = useCart();
+  const [items, setItems] = useState([]);
+  
+  useEffect(() => {
+    // Transform cart items for display
+    const transformedItems = cartItems.map((item, index) => {
+      const product = item.product_id || item;
+      return {
+        id: product._id || item._id || index,
+        name: product.name || 'Unknown Product',
+        category: product.category?.name || 'Uncategorized',
+        price: item.price_at_time || product.price || 0,
+        quantity: item.quantity || 1,
+        stock: product.quantity || 0,
+        image: (product.images && product.images.length > 0) 
+          ? product.images[0] 
+          : "https://via.placeholder.com/300",
+      };
+    });
+    setItems(transformedItems);
+  }, [cartItems]);
 
-  const handleUpdateQuantity = (itemId, newQuantity) => {
+  const handleUpdateQuantity = async (itemId, newQuantity) => {
     if (newQuantity < 1) return;
-    setCartItems(items =>
-      items.map(item =>
-        item.id === itemId ? { ...item, quantity: newQuantity } : item
-      )
-    );
+    
+    // Find the item to check stock
+    const item = items.find(i => i.id === itemId);
+    if (!item) return;
+    
+    // Check if new quantity exceeds stock
+    if (newQuantity > item.stock) {
+      alert(`Cannot add more than ${item.stock} items. Only ${item.stock} available in stock.`);
+      return;
+    }
+    
+    const result = await updateQuantity(itemId, newQuantity);
+    if (!result.success) {
+      alert(`Error: ${result.error}`);
+    }
   };
 
-  const handleRemoveItem = (itemId) => {
-    setCartItems(items => items.filter(item => item.id !== itemId));
+  const handleRemoveItem = async (itemId) => {
+    const result = await removeFromCart(itemId);
+    if (result.success) {
+      alert('Item removed from cart');
+    } else {
+      alert(`Error: ${result.error}`);
+    }
   };
 
   const handleCheckout = () => {
@@ -52,9 +60,14 @@ export default function BasketPage() {
     // In real app: navigate to checkout page
   };
 
-  const handleClearCart = () => {
+  const handleClearCart = async () => {
     if (window.confirm("Are you sure you want to clear your cart?")) {
-      setCartItems([]);
+      const result = await clearCart();
+      if (result.success) {
+        alert('Cart cleared successfully');
+      } else {
+        alert(`Error: ${result.error}`);
+      }
     }
   };
 
@@ -65,11 +78,11 @@ export default function BasketPage() {
         <div className="mb-8">
           <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-2">Shopping Cart</h1>
           <p className="text-gray-600">
-            {cartItems.length} {cartItems.length === 1 ? 'item' : 'items'} in your cart
+            {items.length} {items.length === 1 ? 'item' : 'items'} in your cart
           </p>
         </div>
 
-        {cartItems.length === 0 ? (
+        {items.length === 0 ? (
           /* Empty Cart State */
           <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
             <svg className="w-24 h-24 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -99,7 +112,7 @@ export default function BasketPage() {
                 </button>
               </div>
 
-              {cartItems.map((item) => (
+              {items.map((item) => (
                 <CartItem
                   key={item.id}
                   item={item}
@@ -122,7 +135,7 @@ export default function BasketPage() {
 
             {/* Order Summary */}
             <div className="lg:col-span-1">
-              <OrderSummary items={cartItems} onCheckout={handleCheckout} />
+              <OrderSummary items={items} onCheckout={handleCheckout} />
             </div>
           </div>
         )}
