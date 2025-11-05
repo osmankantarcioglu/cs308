@@ -118,6 +118,48 @@ class Product extends mongoose.Model {
             { new: true }
         );
     }
+
+    // Increment view count (when product is viewed)
+    static incrementViewCount(productId) {
+        return this.findByIdAndUpdate(
+            productId,
+            { $inc: { view_count: 1 } },
+            { new: true }
+        );
+    }
+
+    // Update popularity score (called after purchase)
+    static updatePopularityOnPurchase(productId, quantitySold) {
+        // Increase popularity score based on quantity sold
+        // Basic formula: popularity = views + (purchases * 10)
+        const popularityIncrease = quantitySold * 10;
+        
+        return this.findByIdAndUpdate(
+            productId,
+            { $inc: { popularity_score: popularityIncrease } },
+            { new: true }
+        );
+    }
+
+    // Calculate and update popularity score
+    static calculatePopularityScore(product) {
+        // Basic popularity formula:
+        // Popularity = (view_count * 0.1) + (purchases * 10) + (recent_activity * 5)
+        // For now, we'll use a simple formula
+        let score = 0;
+        
+        if (product.view_count) {
+            score += product.view_count * 0.1;
+        }
+        
+        // Add bonus for products that are recently viewed
+        const daysSinceCreation = (Date.now() - new Date(product.createdAt).getTime()) / (1000 * 60 * 60 * 24);
+        if (daysSinceCreation < 30) {
+            score += 50; // New product bonus
+        }
+        
+        return Math.round(score);
+    }
 }
 
 schema.loadClass(Product);

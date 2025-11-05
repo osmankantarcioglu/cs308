@@ -3,11 +3,12 @@ const mongoose = require("mongoose");
 const schema = mongoose.Schema({
     user_id: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "Users",
-        required: true
+        ref: "Users"
+        // required: false - can be null for guest users
     },
     session_id: {
-        type: String // For guest users
+        type: String, // For guest users
+        required: true
     },
     items: [{
         product_id: {
@@ -47,25 +48,53 @@ class Cart extends mongoose.Model {
         return this.findOne({ session_id: sessionId, is_active: true });
     }
 
-    static addItemToCart(userId, productId, quantity, price) {
-        return this.findOneAndUpdate(
-            { user_id: userId, is_active: true },
-            {
-                $push: {
-                    items: {
-                        product_id: productId,
-                        quantity: quantity,
-                        price_at_time: price
-                    }
+    static addItemToCart(sessionId, userId, productId, quantity, price) {
+        const query = userId 
+            ? { user_id: userId, is_active: true }
+            : { session_id: sessionId, is_active: true };
+        
+        const update = {
+            $push: {
+                items: {
+                    product_id: productId,
+                    quantity: quantity,
+                    price_at_time: price
                 }
             },
-            { upsert: true, new: true }
+            ...(userId ? { user_id: userId } : { session_id: sessionId }),
+            is_active: true  // Ensure is_active is set for new carts
+        };
+        
+        return this.findOneAndUpdate(
+            query,
+            update,
+            { upsert: true, new: true, setDefaultsOnInsert: true }
         );
     }
 
-    static removeItemFromCart(userId, productId) {
+    static updateItemQuantity(sessionId, userId, productId, quantity) {
+        const query = userId 
+            ? { user_id: userId, is_active: true, 'items.product_id': productId }
+            : { session_id: sessionId, is_active: true, 'items.product_id': productId };
+        
         return this.findOneAndUpdate(
-            { user_id: userId, is_active: true },
+            query,
+            {
+                $set: {
+                    'items.$.quantity': quantity
+                }
+            },
+            { new: true }
+        );
+    }
+
+    static removeItemFromCart(sessionId, userId, productId) {
+        const query = userId 
+            ? { user_id: userId, is_active: true }
+            : { session_id: sessionId, is_active: true };
+        
+        return this.findOneAndUpdate(
+            query,
             {
                 $pull: {
                     items: { product_id: productId }
@@ -75,9 +104,13 @@ class Cart extends mongoose.Model {
         );
     }
 
-    static clearCart(userId) {
+    static clearCart(sessionId, userId) {
+        const query = userId 
+            ? { user_id: userId, is_active: true }
+            : { session_id: sessionId, is_active: true };
+        
         return this.findOneAndUpdate(
-            { user_id: userId, is_active: true },
+            query,
             { is_active: false },
             { new: true }
         );

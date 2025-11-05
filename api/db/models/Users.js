@@ -16,6 +16,7 @@ const schema = mongoose.Schema({
     role: {
         type: String,
         enum: [
+            Enum.USER_ROLES.ADMIN,
             Enum.USER_ROLES.CUSTOMER,
             Enum.USER_ROLES.SALES_MANAGER,
             Enum.USER_ROLES.PRODUCT_MANAGER,
