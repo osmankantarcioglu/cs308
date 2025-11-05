@@ -18,7 +18,7 @@ const USER_ROLES = {
 
 export default function AdminPage() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState("users"); // "users" or "categories"
+  const [activeTab, setActiveTab] = useState("users"); // "users", "categories", or "products"
   
   // Users state
   const [users, setUsers] = useState([]);
@@ -28,6 +28,10 @@ export default function AdminPage() {
   const [categories, setCategories] = useState([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [allCategories, setAllCategories] = useState([]); // For parent category dropdown
+  
+  // Products state
+  const [products, setProducts] = useState([]);
+  const [productsLoading, setProductsLoading] = useState(true);
   
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
@@ -45,17 +49,32 @@ export default function AdminPage() {
   const [categoryCurrentPage, setCategoryCurrentPage] = useState(1);
   const [categoryTotalPages, setCategoryTotalPages] = useState(1);
   
+  // Filters for products
+  const [productStatusFilter, setProductStatusFilter] = useState("");
+  const [productSearchTerm, setProductSearchTerm] = useState("");
+  const [productCurrentPage, setProductCurrentPage] = useState(1);
+  const [productTotalPages, setProductTotalPages] = useState(1);
+  
   // Modal states for users
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showHardDeleteUserModal, setShowHardDeleteUserModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   
   // Modal states for categories
   const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
   const [showEditCategoryModal, setShowEditCategoryModal] = useState(false);
   const [showDeleteCategoryModal, setShowDeleteCategoryModal] = useState(false);
+  const [showHardDeleteCategoryModal, setShowHardDeleteCategoryModal] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState(null);
+  
+  // Modal states for products
+  const [showAddProductModal, setShowAddProductModal] = useState(false);
+  const [showEditProductModal, setShowEditProductModal] = useState(false);
+  const [showDeleteProductModal, setShowDeleteProductModal] = useState(false);
+  const [showHardDeleteProductModal, setShowHardDeleteProductModal] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState(null);
   
   // Form states for users
   const [formData, setFormData] = useState({
@@ -78,6 +97,17 @@ export default function AdminPage() {
     parent_category: "",
     is_active: true,
   });
+  
+  // Form states for products
+  const [productFormData, setProductFormData] = useState({
+    name: "",
+    description: "",
+    quantity: 0,
+    price: 0,
+    cost: 0,
+    category: "",
+    is_active: true,
+  });
 
   useEffect(() => {
     // Check if user is authenticated
@@ -91,8 +121,11 @@ export default function AdminPage() {
     } else if (activeTab === "categories") {
       fetchCategories();
       fetchAllCategories(); // For parent category dropdown
+    } else if (activeTab === "products") {
+      fetchProducts();
+      fetchAllCategories(); // For category dropdown
     }
-  }, [roleFilter, statusFilter, searchTerm, currentPage, activeTab, navigate, categoryStatusFilter, categorySearchTerm, categoryCurrentPage]);
+  }, [roleFilter, statusFilter, searchTerm, currentPage, activeTab, navigate, categoryStatusFilter, categorySearchTerm, categoryCurrentPage, productStatusFilter, productSearchTerm, productCurrentPage]);
 
   // Fetch all categories for parent dropdown
   const fetchAllCategories = async () => {
@@ -309,6 +342,39 @@ export default function AdminPage() {
     }
   };
 
+  const handleHardDeleteCategory = async () => {
+    try {
+      setError(null);
+      const token = getAuthToken();
+
+      const response = await fetch(`${API_BASE_URL}/categories/${selectedCategory._id}/hard`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to permanently delete category");
+      }
+
+      setSuccess("Category permanently deleted!");
+      setShowHardDeleteCategoryModal(false);
+      setSelectedCategory(null);
+      fetchCategories();
+      fetchAllCategories();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const openHardDeleteCategoryModal = (category) => {
+    setSelectedCategory(category);
+    setShowHardDeleteCategoryModal(true);
+  };
+
   const handleActivateCategory = async (categoryId) => {
     try {
       setError(null);
@@ -353,6 +419,217 @@ export default function AdminPage() {
 
   const resetCategoryForm = () => {
     setCategoryFormData({ name: "", description: "", parent_category: "", is_active: true });
+  };
+
+  // Product functions
+  const fetchProducts = async () => {
+    try {
+      setProductsLoading(true);
+      setError(null);
+      
+      const token = getAuthToken();
+      if (!token) {
+        setError("Please log in to access admin panel");
+        return;
+      }
+
+      const params = new URLSearchParams();
+      if (productStatusFilter !== "") params.append("is_active", productStatusFilter);
+      if (productSearchTerm) params.append("search", productSearchTerm);
+      params.append("page", productCurrentPage);
+      params.append("limit", "20");
+
+      const response = await fetch(`${API_BASE_URL}/products?${params.toString()}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (response.status === 401 || response.status === 403) {
+        localStorage.removeItem("authToken");
+        localStorage.removeItem("user");
+        setError("Unauthorized. Admin access required.");
+        navigate('/login');
+        return;
+      }
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to fetch products");
+      }
+
+      const data = await response.json();
+      setProducts(data.data.products);
+      setProductTotalPages(data.data.pagination.pages);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setProductsLoading(false);
+    }
+  };
+
+  const handleAddProduct = async (e) => {
+    e.preventDefault();
+    try {
+      setError(null);
+      const token = getAuthToken();
+
+      const response = await fetch(`${API_BASE_URL}/products`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(productFormData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to create product");
+      }
+
+      setSuccess("Product created successfully!");
+      setShowAddProductModal(false);
+      setProductFormData({ name: "", description: "", quantity: 0, price: 0, cost: 0, category: "", is_active: true });
+      fetchProducts();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleEditProduct = async (e) => {
+    e.preventDefault();
+    try {
+      setError(null);
+      const token = getAuthToken();
+
+      const response = await fetch(`${API_BASE_URL}/products/${selectedProduct._id}`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(productFormData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to update product");
+      }
+
+      setSuccess("Product updated successfully!");
+      setShowEditProductModal(false);
+      setSelectedProduct(null);
+      setProductFormData({ name: "", description: "", quantity: 0, price: 0, cost: 0, category: "", is_active: true });
+      fetchProducts();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleDeleteProduct = async () => {
+    try {
+      setError(null);
+      const token = getAuthToken();
+
+      const response = await fetch(`${API_BASE_URL}/admin/products/${selectedProduct._id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to delete product");
+      }
+
+      setSuccess("Product deactivated successfully!");
+      setShowDeleteProductModal(false);
+      setSelectedProduct(null);
+      fetchProducts();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleHardDeleteProduct = async () => {
+    try {
+      setError(null);
+      const token = getAuthToken();
+
+      const response = await fetch(`${API_BASE_URL}/admin/products/${selectedProduct._id}/hard`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to permanently delete product");
+      }
+
+      setSuccess("Product permanently deleted!");
+      setShowHardDeleteProductModal(false);
+      setSelectedProduct(null);
+      fetchProducts();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleActivateProduct = async (productId) => {
+    try {
+      setError(null);
+      const token = getAuthToken();
+
+      const response = await fetch(`${API_BASE_URL}/products/${productId}`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ is_active: true }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to activate product");
+      }
+
+      setSuccess("Product activated successfully!");
+      fetchProducts();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const openEditProductModal = (product) => {
+    setSelectedProduct(product);
+    setProductFormData({
+      name: product.name || "",
+      description: product.description || "",
+      quantity: product.quantity || 0,
+      price: product.price || 0,
+      cost: product.cost || 0,
+      category: product.category?._id || product.category || "",
+      is_active: product.is_active !== undefined ? product.is_active : true,
+    });
+    setShowEditProductModal(true);
+  };
+
+  const openDeleteProductModal = (product) => {
+    setSelectedProduct(product);
+    setShowDeleteProductModal(true);
+  };
+
+  const openHardDeleteProductModal = (product) => {
+    setSelectedProduct(product);
+    setShowHardDeleteProductModal(true);
   };
 
   const handleAddUser = async (e) => {
@@ -442,6 +719,38 @@ export default function AdminPage() {
     } catch (err) {
       setError(err.message);
     }
+  };
+
+  const handleHardDeleteUser = async () => {
+    try {
+      setError(null);
+      const token = getAuthToken();
+
+      const response = await fetch(`${API_BASE_URL}/admin/users/${selectedUser._id}/hard`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to permanently delete user");
+      }
+
+      setSuccess("User permanently deleted!");
+      setShowHardDeleteUserModal(false);
+      setSelectedUser(null);
+      fetchUsers();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const openHardDeleteUserModal = (user) => {
+    setSelectedUser(user);
+    setShowHardDeleteUserModal(true);
   };
 
   const handleChangeRole = async (userId, newRole) => {
@@ -547,7 +856,8 @@ export default function AdminPage() {
   }, [success]);
 
   if ((activeTab === "users" && usersLoading && users.length === 0) || 
-      (activeTab === "categories" && categoriesLoading && categories.length === 0)) {
+      (activeTab === "categories" && categoriesLoading && categories.length === 0) ||
+      (activeTab === "products" && productsLoading && products.length === 0)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-xl">Loading...</div>
@@ -609,6 +919,16 @@ export default function AdminPage() {
               }`}
             >
               Categories
+            </button>
+            <button
+              onClick={() => setActiveTab("products")}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === "products"
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
+            >
+              Products
             </button>
           </nav>
         </div>
@@ -767,6 +1087,12 @@ export default function AdminPage() {
                           Activate
                         </button>
                       )}
+                      <button
+                        onClick={() => openHardDeleteUserModal(user)}
+                        className="text-red-800 hover:text-red-900 font-bold"
+                      >
+                        Delete
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -1153,6 +1479,36 @@ export default function AdminPage() {
             </div>
           </div>
         )}
+
+        {/* Hard Delete User Confirmation Modal */}
+        {showHardDeleteUserModal && selectedUser && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+              <h2 className="text-xl font-bold mb-4 text-red-600">⚠️ Permanent Delete</h2>
+              <p className="text-gray-600 mb-6">
+                Are you sure you want to <strong>permanently delete</strong> {selectedUser.first_name}{" "}
+                {selectedUser.last_name} ({selectedUser.email})? This action <strong>cannot be undone</strong>.
+              </p>
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={() => {
+                    setShowHardDeleteUserModal(false);
+                    setSelectedUser(null);
+                  }}
+                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleHardDeleteUser}
+                  className="px-4 py-2 bg-red-800 text-white rounded-md hover:bg-red-900"
+                >
+                  Delete Permanently
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
           </>
         )}
 
@@ -1279,6 +1635,12 @@ export default function AdminPage() {
                               Activate
                             </button>
                           )}
+                          <button
+                            onClick={() => openHardDeleteCategoryModal(category)}
+                            className="text-red-800 hover:text-red-900 font-bold"
+                          >
+                            Delete
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -1540,6 +1902,543 @@ export default function AdminPage() {
                       className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
                     >
                       Deactivate
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Hard Delete Category Confirmation Modal */}
+            {showHardDeleteCategoryModal && selectedCategory && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+                  <h2 className="text-xl font-bold mb-4 text-red-600">⚠️ Permanent Delete</h2>
+                  <p className="text-gray-600 mb-6">
+                    Are you sure you want to <strong>permanently delete</strong> "{selectedCategory.name}"? 
+                    This action <strong>cannot be undone</strong>. Make sure there are no subcategories or products associated with this category.
+                  </p>
+                  <div className="flex justify-end space-x-3">
+                    <button
+                      onClick={() => {
+                        setShowHardDeleteCategoryModal(false);
+                        setSelectedCategory(null);
+                      }}
+                      className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleHardDeleteCategory}
+                      className="px-4 py-2 bg-red-800 text-white rounded-md hover:bg-red-900"
+                    >
+                      Delete Permanently
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Products Tab */}
+        {activeTab === "products" && (
+          <>
+            {/* Filters */}
+            <div className="bg-white rounded-lg shadow p-6 mb-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Search
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Search by name or description..."
+                    value={productSearchTerm}
+                    onChange={(e) => {
+                      setProductSearchTerm(e.target.value);
+                      setProductCurrentPage(1);
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Status
+                  </label>
+                  <select
+                    value={productStatusFilter}
+                    onChange={(e) => {
+                      setProductStatusFilter(e.target.value);
+                      setProductCurrentPage(1);
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">All Status</option>
+                    <option value="true">Active</option>
+                    <option value="false">Inactive</option>
+                  </select>
+                </div>
+                <div className="flex items-end">
+                  <button
+                    onClick={() => setShowAddProductModal(true)}
+                    className="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
+                  >
+                    Add New Product
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Products Table */}
+            <div className="bg-white rounded-lg shadow overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Name
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Description
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Category
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Price
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Quantity
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {products.map((product) => (
+                      <tr key={product._id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-medium text-gray-900">
+                            {product.name}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-sm text-gray-500 max-w-xs truncate">
+                            {product.description || "-"}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-500">
+                            {product.category?.name || "Uncategorized"}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900">
+                            ${product.price?.toFixed(2) || "0.00"}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900">
+                            {product.quantity || 0}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span
+                            className={`px-2 py-1 text-xs font-medium rounded-full ${
+                              product.is_active
+                                ? "bg-green-100 text-green-800"
+                                : "bg-red-100 text-red-800"
+                            }`}
+                          >
+                            {product.is_active ? "Active" : "Inactive"}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                          <button
+                            onClick={() => openEditProductModal(product)}
+                            className="text-blue-600 hover:text-blue-900"
+                          >
+                            Edit
+                          </button>
+                          {product.is_active ? (
+                            <button
+                              onClick={() => openDeleteProductModal(product)}
+                              className="text-red-600 hover:text-red-900"
+                            >
+                              Deactivate
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleActivateProduct(product._id)}
+                              className="text-green-600 hover:text-green-900"
+                            >
+                              Activate
+                            </button>
+                          )}
+                          <button
+                            onClick={() => openHardDeleteProductModal(product)}
+                            className="text-red-800 hover:text-red-900 font-bold"
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination */}
+              {productTotalPages > 1 && (
+                <div className="bg-gray-50 px-4 py-3 flex items-center justify-between border-t border-gray-200">
+                  <div className="flex-1 flex justify-between sm:hidden">
+                    <button
+                      onClick={() => setProductCurrentPage((p) => Math.max(1, p - 1))}
+                      disabled={productCurrentPage === 1}
+                      className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      Previous
+                    </button>
+                    <button
+                      onClick={() => setProductCurrentPage((p) => Math.min(productTotalPages, p + 1))}
+                      disabled={productCurrentPage === productTotalPages}
+                      className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      Next
+                    </button>
+                  </div>
+                  <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm text-gray-700">
+                        Page <span className="font-medium">{productCurrentPage}</span> of{" "}
+                        <span className="font-medium">{productTotalPages}</span>
+                      </p>
+                    </div>
+                    <div>
+                      <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
+                        <button
+                          onClick={() => setProductCurrentPage((p) => Math.max(1, p - 1))}
+                          disabled={productCurrentPage === 1}
+                          className="px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                        >
+                          Previous
+                        </button>
+                        <button
+                          onClick={() => setProductCurrentPage((p) => Math.min(productTotalPages, p + 1))}
+                          disabled={productCurrentPage === productTotalPages}
+                          className="px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                        >
+                          Next
+                        </button>
+                      </nav>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Add Product Modal */}
+            {showAddProductModal && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
+                  <h2 className="text-xl font-bold mb-4">Add New Product</h2>
+                  <form onSubmit={handleAddProduct}>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Name *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={productFormData.name}
+                          onChange={(e) =>
+                            setProductFormData({ ...productFormData, name: e.target.value })
+                          }
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Description *
+                        </label>
+                        <textarea
+                          required
+                          value={productFormData.description}
+                          onChange={(e) =>
+                            setProductFormData({ ...productFormData, description: e.target.value })
+                          }
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                          rows="3"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Price *
+                          </label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            required
+                            value={productFormData.price}
+                            onChange={(e) =>
+                              setProductFormData({ ...productFormData, price: parseFloat(e.target.value) || 0 })
+                            }
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Quantity *
+                          </label>
+                          <input
+                            type="number"
+                            required
+                            value={productFormData.quantity}
+                            onChange={(e) =>
+                              setProductFormData({ ...productFormData, quantity: parseInt(e.target.value) || 0 })
+                            }
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Category
+                        </label>
+                        <select
+                          value={productFormData.category}
+                          onChange={(e) =>
+                            setProductFormData({ ...productFormData, category: e.target.value })
+                          }
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        >
+                          <option value="">Select Category</option>
+                          {allCategories
+                            .filter((cat) => cat.is_active)
+                            .map((cat) => (
+                              <option key={cat._id} value={cat._id}>
+                                {cat.name}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+                      <div className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={productFormData.is_active}
+                          onChange={(e) =>
+                            setProductFormData({ ...productFormData, is_active: e.target.checked })
+                          }
+                          className="mr-2"
+                        />
+                        <label className="text-sm font-medium text-gray-700">Active</label>
+                      </div>
+                    </div>
+                    <div className="mt-6 flex justify-end space-x-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowAddProductModal(false);
+                          setProductFormData({ name: "", description: "", quantity: 0, price: 0, cost: 0, category: "", is_active: true });
+                        }}
+                        className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                      >
+                        Create Product
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {/* Edit Product Modal */}
+            {showEditProductModal && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
+                  <h2 className="text-xl font-bold mb-4">Edit Product</h2>
+                  <form onSubmit={handleEditProduct}>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Name *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={productFormData.name}
+                          onChange={(e) =>
+                            setProductFormData({ ...productFormData, name: e.target.value })
+                          }
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Description *
+                        </label>
+                        <textarea
+                          required
+                          value={productFormData.description}
+                          onChange={(e) =>
+                            setProductFormData({ ...productFormData, description: e.target.value })
+                          }
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                          rows="3"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Price *
+                          </label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            required
+                            value={productFormData.price}
+                            onChange={(e) =>
+                              setProductFormData({ ...productFormData, price: parseFloat(e.target.value) || 0 })
+                            }
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Quantity *
+                          </label>
+                          <input
+                            type="number"
+                            required
+                            value={productFormData.quantity}
+                            onChange={(e) =>
+                              setProductFormData({ ...productFormData, quantity: parseInt(e.target.value) || 0 })
+                            }
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Category
+                        </label>
+                        <select
+                          value={productFormData.category}
+                          onChange={(e) =>
+                            setProductFormData({ ...productFormData, category: e.target.value })
+                          }
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        >
+                          <option value="">Select Category</option>
+                          {allCategories
+                            .filter((cat) => cat.is_active)
+                            .map((cat) => (
+                              <option key={cat._id} value={cat._id}>
+                                {cat.name}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+                      <div className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={productFormData.is_active}
+                          onChange={(e) =>
+                            setProductFormData({ ...productFormData, is_active: e.target.checked })
+                          }
+                          className="mr-2"
+                        />
+                        <label className="text-sm font-medium text-gray-700">Active</label>
+                      </div>
+                    </div>
+                    <div className="mt-6 flex justify-end space-x-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowEditProductModal(false);
+                          setSelectedProduct(null);
+                          setProductFormData({ name: "", description: "", quantity: 0, price: 0, cost: 0, category: "", is_active: true });
+                        }}
+                        className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                      >
+                        Update Product
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {/* Delete Product Confirmation Modal */}
+            {showDeleteProductModal && selectedProduct && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+                  <h2 className="text-xl font-bold mb-4">Confirm Deactivation</h2>
+                  <p className="text-gray-600 mb-6">
+                    Are you sure you want to deactivate "{selectedProduct.name}"? This action can be reversed later.
+                  </p>
+                  <div className="flex justify-end space-x-3">
+                    <button
+                      onClick={() => {
+                        setShowDeleteProductModal(false);
+                        setSelectedProduct(null);
+                      }}
+                      className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleDeleteProduct}
+                      className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+                    >
+                      Deactivate
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Hard Delete Product Confirmation Modal */}
+            {showHardDeleteProductModal && selectedProduct && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+                  <h2 className="text-xl font-bold mb-4 text-red-600">⚠️ Permanent Delete</h2>
+                  <p className="text-gray-600 mb-6">
+                    Are you sure you want to <strong>permanently delete</strong> "{selectedProduct.name}"? 
+                    This action <strong>cannot be undone</strong>.
+                  </p>
+                  <div className="flex justify-end space-x-3">
+                    <button
+                      onClick={() => {
+                        setShowHardDeleteProductModal(false);
+                        setSelectedProduct(null);
+                      }}
+                      className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleHardDeleteProduct}
+                      className="px-4 py-2 bg-red-800 text-white rounded-md hover:bg-red-900"
+                    >
+                      Delete Permanently
                     </button>
                   </div>
                 </div>

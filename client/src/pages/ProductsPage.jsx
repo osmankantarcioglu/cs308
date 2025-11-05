@@ -3,35 +3,59 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useCart } from "../context/CartContext";
 
 const API_BASE_URL = "http://localhost:3000/products";
+const CATEGORIES_API_URL = "http://localhost:3000/categories";
 
 export default function ProductsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const { addToCart } = useCart();
   const [addingToCart, setAddingToCart] = useState(null);
   const [searchTerm, setSearchTerm] = useState(searchParams.get("q") || "");
   const [searchInput, setSearchInput] = useState(searchParams.get("q") || "");
+  const [selectedCategory, setSelectedCategory] = useState(searchParams.get("category") || "");
   const [sortBy, setSortBy] = useState(""); // "price_asc", "price_desc", "popularity"
   
-  // Update search term when URL changes (from Navbar)
+  // Update search term and category when URL changes (from Navbar)
   useEffect(() => {
     const urlSearchTerm = searchParams.get("q") || "";
+    const urlCategory = searchParams.get("category") || "";
     if (urlSearchTerm !== searchTerm) {
       setSearchTerm(urlSearchTerm);
       setSearchInput(urlSearchTerm);
     }
-  }, [searchParams]);
-  
-  // Update URL when search term changes
-  useEffect(() => {
-    if (searchTerm) {
-      setSearchParams({ q: searchTerm }, { replace: true });
-    } else {
-      setSearchParams({}, { replace: true });
+    if (urlCategory !== selectedCategory) {
+      setSelectedCategory(urlCategory);
     }
-  }, [searchTerm, setSearchParams]);
+  }, [searchParams, searchTerm, selectedCategory]);
+  
+  // Update URL when search term or category changes
+  useEffect(() => {
+    const params = {};
+    if (searchTerm) params.q = searchTerm;
+    if (selectedCategory) params.category = selectedCategory;
+    setSearchParams(params, { replace: true });
+  }, [searchTerm, selectedCategory, setSearchParams]);
+
+  // Fetch categories on mount
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const response = await fetch(`${CATEGORIES_API_URL}?is_active=true&limit=1000`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.data && data.data.categories) {
+            setCategories(data.data.categories);
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching categories:", err);
+      }
+    };
+    fetchCategories();
+  }, []);
 
   const fetchProducts = useCallback(async () => {
     try {
@@ -42,6 +66,10 @@ export default function ProductsPage() {
       if (searchTerm) {
         params.append('search', searchTerm);
       }
+      if (selectedCategory) {
+        params.append('category', selectedCategory);
+      }
+      params.append('limit', '100'); // Increase limit to show more products
       
       const response = await fetch(`${API_BASE_URL}?${params.toString()}`);
       
@@ -73,7 +101,7 @@ export default function ProductsPage() {
     } finally {
       setLoading(false);
     }
-  }, [searchTerm, sortBy]);
+  }, [searchTerm, selectedCategory, sortBy]);
 
   useEffect(() => {
     fetchProducts();
@@ -173,6 +201,22 @@ export default function ProductsPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </button>
+          </div>
+
+          {/* Category Filter */}
+          <div className="md:w-64">
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="w-full px-4 py-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent bg-white"
+            >
+              <option value="">All Categories</option>
+              {categories.map((category) => (
+                <option key={category._id} value={category._id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Sort Dropdown */}
