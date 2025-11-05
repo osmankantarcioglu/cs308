@@ -13,21 +13,66 @@ const { requireAdmin } = require('../lib/middleware');
 router.get('/', async function(req, res, next) {
     try {
         const { category, search, minPrice, maxPrice, page = 1, limit = 10 } = req.query;
+        const Category = require('../db/models/Category');
+        
+        // Get active category IDs first (more efficient)
+        const activeCategories = await Category.find({ is_active: true }).select('_id');
+        const activeCategoryIds = activeCategories.map(cat => cat._id);
         
         // Build query
         let query = {};
         
-        // Filter by category
+        // Only show active products
+        query.is_active = true;
+        
+        // Filter by category (only if category is provided)
         if (category) {
+            // Verify requested category is active
+            if (!activeCategoryIds.some(id => id.toString() === category)) {
+                // Requested category is inactive, return empty results
+                return res.json({
+                    success: true,
+                    data: {
+                        products: [],
+                        pagination: {
+                            page: parseInt(page),
+                            limit: parseInt(limit),
+                            total: 0,
+                            pages: 0
+                        }
+                    }
+                });
+            }
             query.category = category;
+        } else {
+            // If no category filter, only show products with active categories (or no category)
+            query.$or = [
+                { category: { $in: activeCategoryIds } },
+                { category: null }
+            ];
         }
         
         // Search by name or description
         if (search) {
-            query.$or = [
-                { name: { $regex: search, $options: 'i' } },
-                { description: { $regex: search, $options: 'i' } }
-            ];
+            const searchCondition = {
+                $or: [
+                    { name: { $regex: search, $options: 'i' } },
+                    { description: { $regex: search, $options: 'i' } }
+                ]
+            };
+            // If we already have $or for category, use $and to combine
+            if (query.$or) {
+                query = {
+                    ...query,
+                    $and: [
+                        { $or: query.$or },
+                        searchCondition
+                    ]
+                };
+                delete query.$or;
+            } else {
+                query.$or = searchCondition.$or;
+            }
         }
         
         // Filter by price range
@@ -40,6 +85,7 @@ router.get('/', async function(req, res, next) {
         // Apply pagination
         const skip = (parseInt(page) - 1) * parseInt(limit);
         
+        // Find products with active categories
         const products = await Product.find(query)
             .populate('category', 'name')
             .populate('created_by', 'username email')
@@ -47,6 +93,7 @@ router.get('/', async function(req, res, next) {
             .limit(parseInt(limit))
             .sort({ popularity_score: -1, createdAt: -1 });
         
+        // Get total count
         const total = await Product.countDocuments(query);
         
         res.json({
