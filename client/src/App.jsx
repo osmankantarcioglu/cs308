@@ -8,6 +8,8 @@ import DealsSection from "./components/DealsSection";
 import Footer from "./components/Footer";
 import BasketPage from "./pages/BasketPage";
 import ProductsPage from "./pages/ProductsPage";
+import AdminPage from "./pages/AdminPage";
+import LoginPage from "./pages/LoginPage";
 
 export default function App() {
   return (
@@ -28,6 +30,8 @@ export default function App() {
           />
           <Route path="/products" element={<ProductsPage />} />
           <Route path="/basket" element={<BasketPage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/admin" element={<AdminPage />} />
         </Routes>
         <Footer />
       </div>
