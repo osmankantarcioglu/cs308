@@ -2,6 +2,8 @@ var express = require('express');
 var router = express.Router();
 const Product = require('../db/models/Product');
 const { NotFoundError, ValidationError } = require('../lib/Error');
+const { authenticate } = require('../lib/auth');
+const { requireAdmin } = require('../lib/middleware');
 
 /**
  * @route   GET /products
@@ -79,13 +81,18 @@ router.get('/:id', async function(req, res, next) {
             throw new NotFoundError('Product not found');
         }
         
-        // Increment view count
-        product.view_count += 1;
-        await product.save();
+        // Increment view count using model method
+        await Product.incrementViewCount(req.params.id);
+        
+        // Fetch updated product
+        const updatedProduct = await Product.findById(req.params.id)
+            .populate('category', 'name')
+            .populate('created_by', 'username email')
+            .populate('updated_by', 'username email');
         
         res.json({
             success: true,
-            data: product
+            data: updatedProduct
         });
     } catch (error) {
         if (error.name === 'CastError') {
@@ -237,8 +244,9 @@ router.put('/:id', async function(req, res, next) {
 /**
  * @route   DELETE /products/:id
  * @desc    Delete a product (soft delete by setting is_active to false)
+ * @access  Admin only
  */
-router.delete('/:id', async function(req, res, next) {
+router.delete('/:id', authenticate, requireAdmin, async function(req, res, next) {
     try {
         const product = await Product.findById(req.params.id);
         
@@ -270,8 +278,9 @@ router.delete('/:id', async function(req, res, next) {
 /**
  * @route   DELETE /products/:id/hard
  * @desc    Permanently delete a product from database
+ * @access  Admin only
  */
-router.delete('/:id/hard', async function(req, res, next) {
+router.delete('/:id/hard', authenticate, requireAdmin, async function(req, res, next) {
     try {
         const product = await Product.findByIdAndDelete(req.params.id);
         

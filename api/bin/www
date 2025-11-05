@@ -92,5 +92,19 @@ function onListening() {
 
   // Connect to Database
   const db = new Database();
-  db.connect(config.DB);
+  db.connect(config.DB)
+    .then(async () => {
+      console.log('Database connected successfully');
+      // Ensure admin user exists (both local and deployment)
+      try {
+        const { ensureAdminUser } = require('../lib/bootstrap');
+        await ensureAdminUser();
+      } catch (error) {
+        console.error('Failed to ensure admin user:', error.message);
+        // Don't exit - allow server to continue running
+      }
+    })
+    .catch(err => {
+      console.error('DB connection failed:', err);
+    });
 }

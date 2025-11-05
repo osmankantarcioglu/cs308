@@ -1,5 +1,6 @@
 module.exports = {
     USER_ROLES: {
+        ADMIN: "admin",
         CUSTOMER: "customer",
         SALES_MANAGER: "sales_manager",
         PRODUCT_MANAGER: "product_manager",

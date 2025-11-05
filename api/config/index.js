@@ -5,7 +5,8 @@ module.exports = {
     },
     TOKEN_EXPIRE_TIME: !isNaN(parseInt(process.env.TOKEN_EXPIRE_TIME)) ? parseInt(process.env.TOKEN_EXPIRE_TIME) : 60 * 60 * 24, // minutes
     JWT: {
-        SECRET: process.env.JWT_SECRET,
+        // Provide a safe default for local/dev; override in production with env
+        SECRET: process.env.JWT_SECRET || "dev-change-me-jwt-secret",
         SESSION: {
             session: false
         }
