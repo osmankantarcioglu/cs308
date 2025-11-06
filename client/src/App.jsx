@@ -13,7 +13,7 @@ import LoginPage from "./pages/LoginPage";
 import Dashboard from "./pages/Dashboard";
 import Pricing from "./pages/Pricing";
 import Invoices from "./pages/Invoices";
-
+import SupportAgentPage from "./pages/SupportAgentPage";
 export default function App() {
   return (
     <CartProvider>
@@ -38,7 +38,8 @@ export default function App() {
 
           <Route path="/sales" element={<Dashboard />} />
           <Route path="/sales/pricing" element={<Pricing />} />
-          <Route path="/sales/invoices" element={<Invoices />} /> 
+          <Route path="/sales/invoices" element={<Invoices />} />
+          <Route path="/support" element={<SupportAgentPage />} />
         </Routes>
         <Footer />
       </div>
