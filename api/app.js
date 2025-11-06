@@ -14,6 +14,7 @@ var cartRouter = require('./routes/cart');
 var adminRouter = require('./routes/admin');
 var categoriesRouter = require('./routes/categories');
 var authRouter = require('./routes/auth');
+var supportRouter = require('./routes/support');
 
 var app = express();
 
@@ -32,7 +33,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
-
+app.use('/files', express.static(path.join(__dirname, 'uploads')));
 
 
 // We define our routes here!!
@@ -43,6 +44,7 @@ app.use('/products', productsRouter); // http://localhost:3000/products
 app.use('/cart', cartRouter); // http://localhost:3000/cart
 app.use('/admin', adminRouter); // http://localhost:3000/admin
 app.use('/categories', categoriesRouter); // http://localhost:3000/categories
+app.use('/support', supportRouter); // http://localhost:3000/support
 
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {

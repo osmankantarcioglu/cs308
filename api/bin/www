@@ -7,6 +7,7 @@
 var app = require('../app');
 var debug = require('debug')('api:server');
 var http = require('http');
+const { Server } = require('socket.io'); // ✅ added
 const Database = require("../db/Database");
 const config = require("../config");
 
@@ -22,6 +23,33 @@ app.set('port', port);
  */
 
 var server = http.createServer(app);
+
+/**
+ * Add Socket.IO (minimal)
+ */
+const io = new Server(server, {
+  cors: {
+    origin: ['http://localhost:5173', 'http://localhost:5174'],
+    credentials: true,
+  },
+});
+app.set('io', io);
+
+io.on('connection', (socket) => {
+  console.log('🔌 Socket connected:', socket.id);
+
+  socket.on('message:send', (payload) => {
+    io.emit('message:new', {
+      ...payload,
+      id: 'msg_' + Math.random().toString(36).slice(2),
+      createdAt: new Date().toISOString(),
+    });
+  });
+
+  socket.on('disconnect', () => {
+    console.log('Socket disconnected:', socket.id);
+  });
+});
 
 /**
  * Listen on provided port, on all network interfaces.
