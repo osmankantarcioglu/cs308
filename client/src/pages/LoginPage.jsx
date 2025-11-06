@@ -1,126 +1,148 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+// client/src/pages/LoginPage.jsx
+import { useState } from "react"
+import { useNavigate, Link } from "react-router-dom"
 
-const API_BASE_URL = "http://localhost:3000";
+const API_BASE_URL =
+  import.meta.env.VITE_API_URL || "http://localhost:3000" // istersen .env ile değiştir
 
 export default function LoginPage() {
-  const navigate = useNavigate();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate()
+  const [email, setEmail] = useState("admin@sabanciuniv.edu")
+  const [password, setPassword] = useState("cs308")
+  const [error, setError] = useState("")
+  const [loading, setLoading] = useState(false)
 
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setError("");
-    setLoading(true);
+  async function handleLogin(e) {
+    e.preventDefault()
+    setError("")
+    setLoading(true)
 
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/login`, {
+      const res = await fetch(`${API_BASE_URL}/users/login`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
-      });
+      })
 
-      const data = await response.json();
+      const data = await res.json()
 
-      if (!response.ok) {
-        throw new Error(data.error || "Login failed");
+      if (!res.ok) {
+        const msg = data.message || data.error || "Login failed"
+        throw new Error(msg)
       }
 
-      // Store token in localStorage
-      if (data.data && data.data.token) {
-        localStorage.setItem("authToken", data.data.token);
-        localStorage.setItem("user", JSON.stringify(data.data.user));
-        
-        // Redirect based on role
-        if (data.data.user.role === "admin") {
-          navigate("/admin");
-        } else {
-          navigate("/");
-        }
+      const token = data?.data?.token
+      const user = data?.data?.user
+
+      if (!token || !user) {
+        throw new Error("Geçersiz cevap: token veya kullanıcı bilgisi yok")
+      }
+
+      // token & user kaydet
+      localStorage.setItem("authToken", token)
+      localStorage.setItem("user", JSON.stringify(user))
+
+      const role = (user.role || "").toLowerCase()
+
+      if (role === "admin") {
+        navigate("/admin")
       } else {
-        throw new Error("No token received");
+        navigate("/")
       }
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Login failed")
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Sign in to your account
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            Or{" "}
-            <a
-              href="#"
-              className="font-medium text-blue-600 hover:text-blue-500"
-            >
-              access the admin panel
-            </a>
-          </p>
-        </div>
-        <form className="mt-8 space-y-6" onSubmit={handleLogin}>
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-              {error}
-            </div>
-          )}
-          <div className="rounded-md shadow-sm -space-y-px">
-            <div>
-              <label htmlFor="email" className="sr-only">
-                Email address
-              </label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                required
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                placeholder="Email address"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
-            <div>
-              <label htmlFor="password" className="sr-only">
-                Password
-              </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                required
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                placeholder="Password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 px-4">
+      <div className="w-full max-w-md">
+        <div className="bg-white/95 backdrop-blur rounded-2xl shadow-xl px-8 py-10">
+          <div className="mb-8 text-center">
+            <h1 className="text-3xl font-bold text-slate-900">CS308 Store</h1>
+            <p className="mt-2 text-sm text-slate-500">
+              Lütfen hesabınıza giriş yapın
+            </p>
           </div>
 
-          <div>
+          <form onSubmit={handleLogin} className="space-y-6">
+            {error && (
+              <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+                {error}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div>
+                <label
+                  htmlFor="email"
+                  className="block text-sm font-medium text-slate-700 mb-1"
+                >
+                  E-posta
+                </label>
+                <input
+                  id="email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="admin@sabanciuniv.edu"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="password"
+                  className="block text-sm font-medium text-slate-700 mb-1"
+                >
+                  Şifre
+                </label>
+                <input
+                  id="password"
+                  type="password"
+                  autoComplete="current-password"
+                  required
+                  className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="cs308"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                />
+              </div>
+            </div>
+
             <button
               type="submit"
               disabled={loading}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition"
             >
-              {loading ? "Signing in..." : "Sign in"}
+              {loading ? "Giriş yapılıyor..." : "Giriş Yap"}
             </button>
-          </div>
-        </form>
+          </form>
+
+          <p className="mt-6 text-center text-xs text-slate-400">
+            Admin için hazır:{" "}
+            <span className="font-mono text-slate-300">
+              admin@sabanciuniv.edu / cs308
+            </span>
+          </p>
+
+          <p className="mt-4 text-center text-sm text-slate-500">
+            Hesabın yok mu?{" "}
+            <Link
+              to="/register"
+              className="font-medium text-blue-600 hover:text-blue-500"
+            >
+              Kayıt ol
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
-  );
+  )
 }
+
 
