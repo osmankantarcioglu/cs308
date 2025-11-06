@@ -10,6 +10,9 @@ import BasketPage from "./pages/BasketPage";
 import ProductsPage from "./pages/ProductsPage";
 import AdminPage from "./pages/AdminPage";
 import LoginPage from "./pages/LoginPage";
+import Dashboard from "./pages/Dashboard";
+import Pricing from "./pages/Pricing";
+import Invoices from "./pages/Invoices";
 
 export default function App() {
   return (
@@ -32,6 +35,10 @@ export default function App() {
           <Route path="/basket" element={<BasketPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/admin" element={<AdminPage />} />
+
+          <Route path="/sales" element={<Dashboard />} />
+          <Route path="/sales/pricing" element={<Pricing />} />
+          <Route path="/sales/invoices" element={<Invoices />} /> 
         </Routes>
         <Footer />
       </div>
