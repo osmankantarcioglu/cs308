@@ -1,11 +1,15 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useCart } from "../context/CartContext";
+import { useAuth } from "../context/AuthContext";
+import { useWishlist } from "../context/WishlistContext";
 
 export default function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const { itemCount } = useCart();
+  const { isAuthenticated, user } = useAuth();
+  const { wishlistCount } = useWishlist();
   const navigate = useNavigate();
 
   const handleSearch = (e) => {
@@ -19,6 +23,28 @@ export default function Navbar() {
   const handleSearchKeyPress = (e) => {
     if (e.key === "Enter") {
       handleSearch(e);
+    }
+  };
+
+  const handleProfileClick = () => {
+    if (isAuthenticated) {
+      // Check if user is admin
+      if (user?.role === 'admin') {
+        navigate('/admin/dashboard');
+      } else {
+        navigate('/profile');
+      }
+    } else {
+      navigate('/login');
+    }
+  };
+
+  const handleWishlistClick = () => {
+    if (isAuthenticated) {
+      navigate('/wishlist');
+    } else {
+      alert('Please login to view your wishlist');
+      navigate('/login');
     }
   };
 
@@ -83,15 +109,28 @@ export default function Navbar() {
 
           {/* Actions */}
           <div className="flex items-center space-x-4">
-            <Link to="/login" className="hidden md:flex items-center space-x-1 text-gray-700 hover:text-primary transition-colors">
+            <button 
+              onClick={handleProfileClick}
+              className="hidden md:flex items-center space-x-1 text-gray-700 hover:text-primary transition-colors"
+              title={isAuthenticated ? `Profile - ${user?.first_name || 'User'}` : 'Login'}
+            >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
               </svg>
-            </Link>
-            <button className="hidden md:flex items-center space-x-1 text-gray-700 hover:text-primary transition-colors">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            </button>
+            <button 
+              onClick={handleWishlistClick}
+              className="hidden md:flex relative items-center space-x-1 text-gray-700 hover:text-primary transition-colors"
+              title="Wishlist"
+            >
+              <svg className="w-6 h-6" fill={isAuthenticated && wishlistCount > 0 ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
               </svg>
+              {isAuthenticated && wishlistCount > 0 && (
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
+                  {wishlistCount}
+                </span>
+              )}
             </button>
             <Link to="/basket" className="relative flex items-center space-x-1 text-gray-700 hover:text-primary transition-colors">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">

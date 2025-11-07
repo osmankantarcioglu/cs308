@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-
-const API_BASE_URL = "http://localhost:3000";
+import { useAuth } from "../context/AuthContext";
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -16,33 +16,22 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/login`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email, password }),
-      });
+      const result = await login(email, password);
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Login failed");
-      }
-
-      // Store token in localStorage
-      if (data.data && data.data.token) {
-        localStorage.setItem("authToken", data.data.token);
-        localStorage.setItem("user", JSON.stringify(data.data.user));
+      if (result.success && result.user) {
+        console.log('Login successful, user role:', result.user.role);
         
-        // Redirect based on role
-        if (data.data.user.role === "admin") {
-          navigate("/admin");
+        // Redirect based on user role (from login result)
+        if (result.user.role === 'admin') {
+          console.log('🔑 Admin user detected, redirecting to /admin');
+          // Use replace to prevent going back to login
+          navigate("/admin", { replace: true });
         } else {
-          navigate("/");
+          console.log('👤 Customer user detected, redirecting to /');
+          navigate("/", { replace: true });
         }
       } else {
-        throw new Error("No token received");
+        throw new Error(result.error || "Login failed");
       }
     } catch (err) {
       setError(err.message);

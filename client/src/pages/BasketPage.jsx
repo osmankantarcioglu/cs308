@@ -1,11 +1,14 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useCart } from "../context/CartContext";
+import { useAuth } from "../context/AuthContext";
 import CartItem from "../components/CartItem";
 import OrderSummary from "../components/OrderSummary";
 
 export default function BasketPage() {
+  const navigate = useNavigate();
   const { cartItems, cartTotal, updateQuantity, removeFromCart, clearCart } = useCart();
+  const { isAuthenticated, user } = useAuth();
   const [items, setItems] = useState([]);
   
   useEffect(() => {
@@ -56,8 +59,18 @@ export default function BasketPage() {
   };
 
   const handleCheckout = () => {
-    alert("Proceeding to checkout...");
-    // In real app: navigate to checkout page
+    if (!isAuthenticated) {
+      alert('Please login to proceed to checkout');
+      navigate('/login');
+      return;
+    }
+    
+    if (items.length === 0) {
+      alert('Your cart is empty');
+      return;
+    }
+    
+    navigate('/checkout');
   };
 
   const handleClearCart = async () => {
