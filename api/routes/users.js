@@ -2,7 +2,9 @@
 var express = require('express');
 var router = express.Router();
 const Users = require('../db/models/Users');
+const Wishlist = require('../db/models/Wishlist');
 const { NotFoundError, ValidationError } = require('../lib/Error');
+const { authenticate } = require('../lib/auth');
 
 /**
  * @route   GET /users
@@ -101,6 +103,105 @@ router.get('/role/:role', async function (req, res, next) {
     res.json({ success: true, data: users });
   } catch (err) {
     next(err);
+  }
+});
+
+/**
+ * @route   GET /users/:id/wishlist
+ * @desc    Get user's wishlist
+ */
+router.get('/:id/wishlist', authenticate, async function (req, res, next) {
+  try {
+    // Verify the user is accessing their own wishlist
+    if (req.user._id.toString() !== req.params.id) {
+      throw new ValidationError('You can only access your own wishlist');
+    }
+
+    const wishlist = await Wishlist.findByUser(req.params.id);
+    
+    if (!wishlist) {
+      return res.json({
+        success: true,
+        data: {
+          products: []
+        }
+      });
+    }
+
+    // Populate product details
+    const populatedWishlist = await Wishlist.findById(wishlist._id)
+      .populate('products.product_id');
+
+    res.json({
+      success: true,
+      data: {
+        products: populatedWishlist.products
+      }
+    });
+  } catch (err) {
+    if (err.name === 'CastError') next(new NotFoundError('Invalid user ID'));
+    else next(err);
+  }
+});
+
+/**
+ * @route   POST /users/:id/wishlist
+ * @desc    Add product to wishlist
+ * @body    { productId }
+ */
+router.post('/:id/wishlist', authenticate, async function (req, res, next) {
+  try {
+    // Verify the user is accessing their own wishlist
+    if (req.user._id.toString() !== req.params.id) {
+      throw new ValidationError('You can only modify your own wishlist');
+    }
+
+    const { productId } = req.body;
+    
+    if (!productId) {
+      throw new ValidationError('productId is required');
+    }
+
+    const result = await Wishlist.addProduct(req.params.id, productId);
+
+    res.json({
+      success: true,
+      message: 'Product added to wishlist',
+      data: result
+    });
+  } catch (err) {
+    if (err.name === 'CastError') next(new NotFoundError('Invalid ID'));
+    else if (err.code === 11000) {
+      next(new ValidationError('Product already in wishlist'));
+    } else next(err);
+  }
+});
+
+/**
+ * @route   DELETE /users/:id/wishlist/:productId
+ * @desc    Remove product from wishlist
+ */
+router.delete('/:id/wishlist/:productId', authenticate, async function (req, res, next) {
+  try {
+    // Verify the user is accessing their own wishlist
+    if (req.user._id.toString() !== req.params.id) {
+      throw new ValidationError('You can only modify your own wishlist');
+    }
+
+    const result = await Wishlist.removeProduct(req.params.id, req.params.productId);
+
+    if (!result) {
+      throw new NotFoundError('Wishlist not found');
+    }
+
+    res.json({
+      success: true,
+      message: 'Product removed from wishlist',
+      data: result
+    });
+  } catch (err) {
+    if (err.name === 'CastError') next(new NotFoundError('Invalid ID'));
+    else next(err);
   }
 });
 
