@@ -157,20 +157,6 @@ export default function RegisterPage() {
               </div>
             </div>
             <div>
-              <label htmlFor="role" className="block text-sm font-medium text-gray-700 mb-1">
-                Role *
-              </label>
-              <select
-                id="role"
-                name="role"
-                value="customer"
-                disabled
-                className="appearance-none relative block w-full px-3 py-2 border border-gray-300 bg-gray-100 text-gray-500 rounded-md cursor-not-allowed sm:text-sm"
-              >
-                <option value="customer">Customer</option>
-              </select>
-            </div>
-            <div>
               <label htmlFor="phone_number" className="block text-sm font-medium text-gray-700 mb-1">
                 Phone Number
               </label>
