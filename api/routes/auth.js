@@ -4,6 +4,7 @@ const Users = require('../db/models/Users');
 const { ValidationError, UnauthorizedError } = require('../lib/Error');
 const { generateToken, authenticate } = require('../lib/auth');
 const bcrypt = require('bcryptjs');
+const Enum = require('../config/Enum');
 
 /**
  * @route   POST /auth/login
@@ -78,7 +79,7 @@ router.get('/me', authenticate, async (req, res, next) => {
 /**
  * @route   POST /auth/register
  * @desc    Register a new customer (public endpoint)
- * @body    { email, password, first_name, last_name, phone_number?, home_address }
+ * @body    { email, password, first_name, last_name, phone_number?, taxID?, home_address? }
  */
 router.post('/register', async (req, res, next) => {
     try {
@@ -88,11 +89,12 @@ router.post('/register', async (req, res, next) => {
             first_name,
             last_name,
             phone_number,
+            taxID,
             home_address
         } = req.body;
 
-        if (!email || !password || !first_name || !last_name || !home_address) {
-            throw new ValidationError('Missing required fields: email, password, first_name, last_name, home_address');
+        if (!email || !password || !first_name || !last_name) {
+            throw new ValidationError('Missing required fields: email, password, first_name, last_name');
         }
 
         // Check if email already exists
@@ -110,10 +112,14 @@ router.post('/register', async (req, res, next) => {
             password: hashedPassword,
             first_name,
             last_name,
-            phone_number,
-            home_address,
-            role: 'customer' // Default role for registration
+            role: Enum.USER_ROLES.CUSTOMER, // Always customer for public registration
+            is_active: true // New registrations are active by default
         });
+
+        // Add optional fields if provided
+        if (phone_number) user.phone_number = phone_number;
+        if (taxID) user.taxID = taxID;
+        if (home_address) user.home_address = home_address;
 
         await user.save();
 

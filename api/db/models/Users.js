@@ -41,10 +41,7 @@ const schema = mongoose.Schema({
         sparse: true // Allow null values but ensure uniqueness when present
     },
     home_address: {
-        type: String,
-        required: function() {
-            return this.role === Enum.USER_ROLES.CUSTOMER;
-        }
+        type: String
     },
     is_active: { 
         type: Boolean, 
