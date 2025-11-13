@@ -13,6 +13,7 @@ import LoginPage from "./pages/LoginPage";
 import Dashboard from "./pages/Dashboard";
 import Pricing from "./pages/Pricing";
 import Invoices from "./pages/Invoices";
+import OrderSuccessPage from "./pages/OrderSuccess";
 
 export default function App() {
   return (
@@ -39,6 +40,7 @@ export default function App() {
           <Route path="/sales" element={<Dashboard />} />
           <Route path="/sales/pricing" element={<Pricing />} />
           <Route path="/sales/invoices" element={<Invoices />} /> 
+          <Route path="/order-success/:orderId" element={<OrderSuccessPage />} />
         </Routes>
         <Footer />
       </div>
