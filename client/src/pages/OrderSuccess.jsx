@@ -17,7 +17,7 @@ export default function OrderSuccessPage() {
   const userEmail = user?.email;
 
   // 1) Invoice detaylarını çek
-  /*useEffect(() => {
+  useEffect(() => {
     async function fetchInvoice() {
       try {
         const res = await fetch(`${API_BASE_URL}/orders/${orderId}/invoice`);
@@ -31,28 +31,9 @@ export default function OrderSuccessPage() {
       }
     }
     fetchInvoice();
-  }, [orderId]);*/
+  }, [orderId]);
 
-  // Sadece FRONTEND tasarım için MOCK veri
-useEffect(() => {
-    const mockInvoice = {
-      number: "INV-1001",
-      date: "2025-11-13",
-      customer: {
-        name: "Nil Yılmaz",
-        email: "nil@sabanciuniv.edu",
-        address: "Sabancı University, Tuzla",
-      },
-      items: [
-        { name: "CS308 Hoodie", qty: 1, price: 300 },
-        { name: "Sticker Pack", qty: 2, price: 50 },
-      ],
-      total: 400,
-    };
-  
-    setInvoice(mockInvoice);
-    setLoading(false);
-  }, [orderId]);  
+ 
 
   // 2) ilk defa invoice yüklendiğinde otomatik e-mail
   useEffect(() => {
