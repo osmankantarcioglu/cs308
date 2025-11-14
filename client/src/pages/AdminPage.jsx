@@ -5,7 +5,7 @@ const API_BASE_URL = "http://localhost:3000";
 
 // Get auth token from localStorage
 const getAuthToken = () => {
-  return localStorage.getItem("authToken");
+  return localStorage.getItem("token") || localStorage.getItem("authToken");
 };
 
 const USER_ROLES = {
@@ -18,7 +18,7 @@ const USER_ROLES = {
 
 export default function AdminPage() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState("users"); // "users", "categories", or "products"
+  const [activeTab, setActiveTab] = useState("users"); // "users", "categories", "products", or "orders"
   
   // Users state
   const [users, setUsers] = useState([]);
@@ -32,6 +32,10 @@ export default function AdminPage() {
   // Products state
   const [products, setProducts] = useState([]);
   const [productsLoading, setProductsLoading] = useState(true);
+  
+  // Orders state
+  const [orders, setOrders] = useState([]);
+  const [ordersLoading, setOrdersLoading] = useState(true);
   
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
@@ -876,8 +880,9 @@ export default function AdminPage() {
           <button
             onClick={() => {
               localStorage.removeItem("authToken");
+              localStorage.removeItem("token");
               localStorage.removeItem("user");
-              navigate("/login");
+              window.location.href = "/admin"; // Force full page reload to admin login
             }}
             className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
           >

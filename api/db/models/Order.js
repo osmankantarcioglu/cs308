@@ -35,7 +35,15 @@ const schema = mongoose.Schema({
         type: Number,
         required: true
     },
+    shipping_cost: {
+        type: Number,
+        default: 0
+    },
     discount_amount: {
+        type: Number,
+        default: 0
+    },
+    tax_amount: {
         type: Number,
         default: 0
     },

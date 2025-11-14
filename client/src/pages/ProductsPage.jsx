@@ -1,22 +1,25 @@
 import { useState, useEffect, useCallback } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { useCart } from "../context/CartContext";
+import { useAuth } from "../context/AuthContext";
+import { useWishlist } from "../context/WishlistContext";
 
 const API_BASE_URL = "http://localhost:3000/products";
 const CATEGORIES_API_URL = "http://localhost:3000/categories";
 
 export default function ProductsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const { addToCart } = useCart();
-  const [addingToCart, setAddingToCart] = useState(null);
   const [searchTerm, setSearchTerm] = useState(searchParams.get("q") || "");
   const [searchInput, setSearchInput] = useState(searchParams.get("q") || "");
   const [selectedCategory, setSelectedCategory] = useState(searchParams.get("category") || "");
   const [sortBy, setSortBy] = useState(""); // "price_asc", "price_desc", "popularity"
+  const { isAuthenticated } = useAuth();
+  const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
   
   // Update search term and category when URL changes (from Navbar)
   useEffect(() => {
@@ -88,7 +91,8 @@ export default function ProductsPage() {
         } else if (sortBy === "price_desc") {
           filteredProducts = [...filteredProducts].sort((a, b) => b.price - a.price);
         } else if (sortBy === "popularity") {
-          filteredProducts = [...filteredProducts].sort((a, b) => b.popularity_score - a.popularity_score);
+          // Sort by view_count in descending order (most viewed first)
+          filteredProducts = [...filteredProducts].sort((a, b) => (b.view_count || 0) - (a.view_count || 0));
         }
         
         setProducts(filteredProducts);
@@ -121,17 +125,32 @@ export default function ProductsPage() {
     }
   };
 
-  const handleAddToCart = async (productId, productName) => {
-    setAddingToCart(productId);
-    const result = await addToCart(productId, 1);
+  const handleSelectProduct = (productId) => {
+    navigate(`/products/${productId}`);
+  };
+
+  const handleWishlistToggle = async (e, productId, productName) => {
+    e.stopPropagation(); // Prevent navigation to product detail
     
-    if (result.success) {
-      alert(`${productName} added to cart!`);
-    } else {
-      alert(`Error: ${result.error}`);
+    if (!isAuthenticated) {
+      alert('Please login to add items to your wishlist');
+      navigate('/login');
+      return;
     }
-    
-    setAddingToCart(null);
+
+    if (isInWishlist(productId)) {
+      const result = await removeFromWishlist(productId);
+      if (!result.success) {
+        alert(`Error: ${result.error}`);
+      }
+    } else {
+      const result = await addToWishlist(productId);
+      if (result.success) {
+        alert(`${productName} added to wishlist!`);
+      } else {
+        alert(`Error: ${result.error}`);
+      }
+    }
   };
 
   if (loading) {
@@ -253,7 +272,16 @@ export default function ProductsPage() {
             {products.map((product) => (
               <div
                 key={product._id}
-                className="group bg-white rounded-xl shadow-sm hover:shadow-xl transition-all overflow-hidden"
+                role="button"
+                tabIndex={0}
+                onClick={() => handleSelectProduct(product._id)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    handleSelectProduct(product._id);
+                  }
+                }}
+                className="group bg-white rounded-xl shadow-sm hover:shadow-xl transition-all overflow-hidden cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary"
               >
                 {/* Image */}
                 <div className="relative aspect-square bg-gray-100 overflow-hidden">
@@ -280,13 +308,37 @@ export default function ProductsPage() {
                       </svg>
                     </div>
                   )}
+                  
+                  {/* Wishlist Button */}
+                  <button
+                    onClick={(e) => handleWishlistToggle(e, product._id, product.name)}
+                    className="absolute top-3 right-3 w-9 h-9 flex items-center justify-center rounded-full bg-white shadow-md hover:shadow-lg transition-all z-10"
+                    title={isInWishlist(product._id) ? "Remove from wishlist" : "Add to wishlist"}
+                  >
+                    <svg 
+                      className={`w-5 h-5 transition-colors ${
+                        isInWishlist(product._id) ? "text-red-500" : "text-gray-700"
+                      }`}
+                      fill={isInWishlist(product._id) ? "currentColor" : "none"}
+                      stroke="currentColor" 
+                      strokeWidth={2}
+                      viewBox="0 0 24 24"
+                    >
+                      <path 
+                        strokeLinecap="round" 
+                        strokeLinejoin="round" 
+                        d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" 
+                      />
+                    </svg>
+                  </button>
+                  
                   {product.quantity === 0 && (
                     <div className="absolute top-4 left-4 bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-full">
                       Out of Stock
                     </div>
                   )}
-                  {product.view_count > 100 && (
-                    <div className="absolute top-4 right-4 bg-blue-500 text-white text-xs font-bold px-3 py-1 rounded-full">
+                  {product.view_count > 200 && (
+                    <div className="absolute bottom-4 left-4 bg-blue-500 text-white text-xs font-bold px-3 py-1 rounded-full">
                       Popular
                     </div>
                   )}
@@ -308,23 +360,17 @@ export default function ProductsPage() {
                   )}
 
                   {/* Stats */}
-                  <div className="flex items-center space-x-4 mb-3 text-xs text-gray-500">
-                    {product.view_count > 0 && (
+                  {product.view_count > 0 && (
+                    <div className="flex items-center space-x-4 mb-3 text-xs text-gray-500">
                       <div className="flex items-center space-x-1">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                         </svg>
-                        <span>{product.view_count}</span>
+                        <span>{Math.floor(product.view_count / 2)} views</span>
                       </div>
-                    )}
-                    <div className="flex items-center space-x-1">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                      </svg>
-                      <span>Stock: {product.quantity}</span>
                     </div>
-                  </div>
+                  )}
 
                   {/* Price */}
                   <div className="mb-4">
@@ -332,24 +378,11 @@ export default function ProductsPage() {
                       ${product.price ? product.price.toFixed(2) : "0.00"}
                     </span>
                   </div>
-
-                  {/* Add to Cart Button */}
-                  <button
-                    disabled={product.quantity === 0 || addingToCart === product._id}
-                    onClick={() => handleAddToCart(product._id, product.name)}
-                    className={`w-full py-2.5 font-semibold rounded-lg transition-colors ${
-                      product.quantity === 0 || addingToCart === product._id
-                        ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-                        : "bg-gray-900 text-white hover:bg-primary"
-                    }`}
-                  >
-                    {addingToCart === product._id 
-                      ? "Adding..." 
-                      : product.quantity === 0 
-                        ? "Out of Stock" 
-                        : "Add to Cart"
-                    }
-                  </button>
+                  <div className="mt-4">
+                    <span className="inline-flex items-center px-3 py-1 text-sm font-medium text-primary bg-primary/10 rounded-full">
+                      Click to view details
+                    </span>
+                  </div>
                 </div>
               </div>
             ))}

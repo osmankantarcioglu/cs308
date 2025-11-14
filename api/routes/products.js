@@ -116,6 +116,7 @@ router.get('/', async function(req, res, next) {
 /**
  * @route   GET /products/:id
  * @desc    Get single product by ID
+ * @query   incrementView=true to increment view count (optional)
  */
 router.get('/:id', async function(req, res, next) {
     try {
@@ -128,18 +129,25 @@ router.get('/:id', async function(req, res, next) {
             throw new NotFoundError('Product not found');
         }
         
-        // Increment view count using model method
-        await Product.incrementViewCount(req.params.id);
-        
-        // Fetch updated product
-        const updatedProduct = await Product.findById(req.params.id)
-            .populate('category', 'name')
-            .populate('created_by', 'username email')
-            .populate('updated_by', 'username email');
+        // Only increment view count if explicitly requested via query param
+        if (req.query.incrementView === 'true') {
+            await Product.incrementViewCount(req.params.id);
+            
+            // Fetch updated product with new view count
+            const updatedProduct = await Product.findById(req.params.id)
+                .populate('category', 'name')
+                .populate('created_by', 'username email')
+                .populate('updated_by', 'username email');
+            
+            return res.json({
+                success: true,
+                data: updatedProduct
+            });
+        }
         
         res.json({
             success: true,
-            data: updatedProduct
+            data: product
         });
     } catch (error) {
         if (error.name === 'CastError') {
@@ -410,6 +418,49 @@ router.post('/:id/stock/decrease', async function(req, res, next) {
             success: true,
             message: 'Stock decreased successfully',
             data: updatedProduct
+        });
+    } catch (error) {
+        if (error.name === 'CastError') {
+            next(new NotFoundError('Invalid product ID'));
+        } else {
+            next(error);
+        }
+    }
+});
+
+/**
+ * @route   GET /products/:id/purchased
+ * @desc    Check if the current user has purchased this product
+ */
+router.get('/:id/purchased', async function(req, res, next) {
+    try {
+        const userId = req.user?.id; // Will be set by auth middleware
+        
+        if (!userId) {
+            // Guest users haven't purchased anything
+            return res.json({
+                success: true,
+                data: {
+                    hasPurchased: false
+                }
+            });
+        }
+        
+        const Order = require('../db/models/Order');
+        const Enum = require('../config/Enum');
+        
+        // Check if user has any completed order containing this product
+        const orders = await Order.find({
+            customer_id: userId,
+            payment_status: Enum.PAYMENT_STATUS.COMPLETED,
+            'items.product_id': req.params.id
+        });
+        
+        res.json({
+            success: true,
+            data: {
+                hasPurchased: orders.length > 0
+            }
         });
     } catch (error) {
         if (error.name === 'CastError') {

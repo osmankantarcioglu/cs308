@@ -2,3 +2,5 @@ node_modules/
 .env
 package-lock.json
 AUTHENTICATION_SYSTEM.md
+ADD_STRIPE_KEYS.txt
+*.txt

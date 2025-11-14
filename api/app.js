@@ -11,6 +11,7 @@ var indexRouter = require('./routes/index');
 var usersRouter = require('./routes/users');
 var productsRouter = require('./routes/products');
 var cartRouter = require('./routes/cart');
+var ordersRouter = require('./routes/orders');
 var adminRouter = require('./routes/admin');
 var categoriesRouter = require('./routes/categories');
 var authRouter = require('./routes/auth');
@@ -41,22 +42,43 @@ app.use('/auth', authRouter); // http://localhost:3000/auth
 app.use('/users', usersRouter); // http://localhost:3000/users
 app.use('/products', productsRouter); // http://localhost:3000/products
 app.use('/cart', cartRouter); // http://localhost:3000/cart
+app.use('/orders', ordersRouter); // http://localhost:3000/orders
 app.use('/admin', adminRouter); // http://localhost:3000/admin
 app.use('/categories', categoriesRouter); // http://localhost:3000/categories
 
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {
+  // For API routes, return JSON 404
+  if (req.path.startsWith('/products') || 
+      req.path.startsWith('/users') || 
+      req.path.startsWith('/cart') || 
+      req.path.startsWith('/orders') || 
+      req.path.startsWith('/admin') || 
+      req.path.startsWith('/auth') ||
+      req.path.startsWith('/categories')) {
+    return res.status(404).json({
+      success: false,
+      error: 'Endpoint not found'
+    });
+  }
   next(createError(404));
 });
 
 // error handler
 app.use(function(err, req, res, next) {
   // Check if the request is for an API endpoint
-  const isApiRequest = req.path.startsWith('/products') || req.path.startsWith('/users') || req.path.startsWith('/cart') || req.path.startsWith('/admin') || req.path.startsWith('/auth');
+  const isApiRequest = req.path.startsWith('/products') || 
+                       req.path.startsWith('/users') || 
+                       req.path.startsWith('/cart') || 
+                       req.path.startsWith('/orders') || 
+                       req.path.startsWith('/admin') || 
+                       req.path.startsWith('/auth') ||
+                       req.path.startsWith('/categories');
   
   if (isApiRequest) {
     // Return JSON error for API endpoints
     const statusCode = err.statusCode || err.status || 500;
+    console.error('API Error:', err.message);
     return res.status(statusCode).json({
       success: false,
       error: err.message || 'Internal Server Error',
