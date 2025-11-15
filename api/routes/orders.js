@@ -7,6 +7,7 @@ const Refund = require('../db/models/Refund');
 const { authenticate } = require('../lib/auth');
 const { NotFoundError, ValidationError } = require('../lib/Error');
 const Enum = require('../config/Enum');
+const { requireAdminOrProductManager } = require('../lib/middleware');
 
 // Initialize Stripe only if API key is provided
 let stripe = null;
@@ -366,6 +367,182 @@ router.get('/', authenticate, async function(req, res, next) {
         });
     } catch (error) {
         next(error);
+    }
+});
+
+/**
+ * @route   GET /orders/management/overview
+ * @desc    Operational snapshot for product managers (orders, invoices, deliveries)
+ * @access  Admin & Product Manager
+ */
+router.get('/management/overview', authenticate, requireAdminOrProductManager, async function(req, res, next) {
+    try {
+        const [
+            totalOrders,
+            statusBreakdown,
+            revenueAgg,
+            recentOrders,
+            invoiceSnapshots
+        ] = await Promise.all([
+            Order.countDocuments(),
+            Order.aggregate([
+                { $group: { _id: '$status', count: { $sum: 1 } } }
+            ]),
+            Order.aggregate([
+                { $match: { payment_status: Enum.PAYMENT_STATUS.COMPLETED } },
+                { $group: { _id: null, total: { $sum: '$total_amount' } } }
+            ]),
+            Order.find({})
+                .sort({ updatedAt: -1 })
+                .limit(6)
+                .select('order_number status total_amount delivery_address updatedAt')
+                .lean(),
+            Order.find({ invoice_path: { $exists: true, $ne: null } })
+                .sort({ order_date: -1 })
+                .limit(6)
+                .select('order_number invoice_path total_amount order_date customer_id')
+                .populate('customer_id', 'first_name last_name email')
+                .lean()
+        ]);
+
+        const statusMap = {
+            [Enum.ORDER_STATUS.PROCESSING]: 0,
+            [Enum.ORDER_STATUS.IN_TRANSIT]: 0,
+            [Enum.ORDER_STATUS.DELIVERED]: 0,
+            [Enum.ORDER_STATUS.CANCELLED]: 0
+        };
+
+        statusBreakdown.forEach((entry) => {
+            if (statusMap.hasOwnProperty(entry._id)) {
+                statusMap[entry._id] = entry.count;
+            }
+        });
+
+        const responsePayload = {
+            totals: {
+                totalOrders,
+                processing: statusMap[Enum.ORDER_STATUS.PROCESSING],
+                inTransit: statusMap[Enum.ORDER_STATUS.IN_TRANSIT],
+                delivered: statusMap[Enum.ORDER_STATUS.DELIVERED],
+                cancelled: statusMap[Enum.ORDER_STATUS.CANCELLED],
+                revenue: revenueAgg[0]?.total || 0
+            },
+            recentOrders,
+            invoices: invoiceSnapshots
+        };
+
+        res.json({
+            success: true,
+            data: responsePayload
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
+/**
+ * @route   GET /orders/management/orders
+ * @desc    Paginated list of orders for product managers
+ */
+router.get('/management/orders', authenticate, requireAdminOrProductManager, async function(req, res, next) {
+    try {
+        const { status = 'all', search = '', page = 1, limit = 20 } = req.query;
+
+        const pageNum = Math.max(1, parseInt(page, 10) || 1);
+        const limitNum = Math.min(50, Math.max(1, parseInt(limit, 10) || 20));
+        const skip = (pageNum - 1) * limitNum;
+
+        const query = {};
+
+        if (status !== 'all') {
+            query.status = status;
+        }
+
+        if (search) {
+            const searchRegex = new RegExp(search, 'i');
+            query.$or = [
+                { order_number: searchRegex },
+                { delivery_address: searchRegex }
+            ];
+        }
+
+        const [orders, total] = await Promise.all([
+            Order.find(query)
+                .populate('customer_id', 'first_name last_name email phone_number')
+                .populate('items.product_id', 'name images sku')
+                .sort({ order_date: -1 })
+                .skip(skip)
+                .limit(limitNum)
+                .lean(),
+            Order.countDocuments(query)
+        ]);
+
+        res.json({
+            success: true,
+            data: {
+                orders,
+                pagination: {
+                    page: pageNum,
+                    limit: limitNum,
+                    total,
+                    pages: Math.ceil(total / limitNum)
+                }
+            }
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
+/**
+ * @route   PATCH /orders/management/orders/:id/status
+ * @desc    Update order delivery status
+ */
+router.patch('/management/orders/:id/status', authenticate, requireAdminOrProductManager, async function(req, res, next) {
+    try {
+        const { status } = req.body;
+
+        if (!status) {
+            throw new ValidationError('Status is required');
+        }
+
+        const allowedStatuses = [
+            Enum.ORDER_STATUS.PROCESSING,
+            Enum.ORDER_STATUS.IN_TRANSIT,
+            Enum.ORDER_STATUS.DELIVERED
+        ];
+
+        if (!allowedStatuses.includes(status)) {
+            throw new ValidationError('Invalid status update');
+        }
+
+        const order = await Order.findById(req.params.id)
+            .populate('customer_id', 'first_name last_name email phone_number')
+            .populate('items.product_id', 'name images sku');
+
+        if (!order) {
+            throw new NotFoundError('Order not found');
+        }
+
+        order.status = status;
+        if (status === Enum.ORDER_STATUS.DELIVERED) {
+            order.delivery_date = new Date();
+        }
+        order.updated_by = req.user._id;
+
+        await order.save();
+
+        res.json({
+            success: true,
+            message: 'Order status updated successfully',
+            data: order
+        });
+    } catch (error) {
+        if (error.name === 'CastError') {
+            next(new NotFoundError('Invalid order ID'));
+        } else {
+            next(error);
+        }
     }
 });
 
