@@ -232,7 +232,7 @@ router.put('/:id', authenticate, requireAdminOrProductManager, async function(re
  * @desc    Delete a category (soft delete by setting is_active to false)
  * @access  Admin only
  */
-router.delete('/:id', authenticate, requireAdmin, async function(req, res, next) {
+router.delete('/:id', authenticate, requireAdminOrProductManager, async function(req, res, next) {
     try {
         const category = await Category.findById(req.params.id);
         

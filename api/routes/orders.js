@@ -4,6 +4,7 @@ const Order = require('../db/models/Order');
 const Cart = require('../db/models/Cart');
 const Product = require('../db/models/Product');
 const Refund = require('../db/models/Refund');
+const Delivery = require('../db/models/Delivery');
 const { authenticate } = require('../lib/auth');
 const { NotFoundError, ValidationError } = require('../lib/Error');
 const Enum = require('../config/Enum');
@@ -311,6 +312,23 @@ router.post('/complete-order', authenticate, async function(req, res, next) {
         await order.save();
         
         console.log('Order created:', order.order_number);
+
+        // Create delivery tasks for each order item
+        if (orderItems.length > 0) {
+            const deliveryPayload = orderItems.map((item) => ({
+                customer_id: userId,
+                order_id: order._id,
+                product_id: item.product_id,
+                quantity: item.quantity,
+                total_price: item.total_price,
+                delivery_address: session.metadata.delivery_address,
+                status: Enum.DELIVERY_STATUS.PENDING,
+                processed_by: req.user._id
+            }));
+
+            await Delivery.insertMany(deliveryPayload);
+            console.log('Delivery entries created:', deliveryPayload.length);
+        }
         
         // Clear the cart - AGGRESSIVE clearing to ensure it works
         const cartId = session.metadata.cartId;
@@ -531,6 +549,29 @@ router.patch('/management/orders/:id/status', authenticate, requireAdminOrProduc
         order.updated_by = req.user._id;
 
         await order.save();
+
+        // Sync delivery tasks with the new status
+        const deliveryStatusMap = {
+            [Enum.ORDER_STATUS.PROCESSING]: Enum.DELIVERY_STATUS.PENDING,
+            [Enum.ORDER_STATUS.IN_TRANSIT]: Enum.DELIVERY_STATUS.IN_TRANSIT,
+            [Enum.ORDER_STATUS.DELIVERED]: Enum.DELIVERY_STATUS.DELIVERED
+        };
+
+        if (deliveryStatusMap[status]) {
+            const updateData = {
+                status: deliveryStatusMap[status],
+                processed_by: req.user._id
+            };
+
+            if (deliveryStatusMap[status] === Enum.DELIVERY_STATUS.DELIVERED) {
+                updateData.delivery_date = new Date();
+            }
+
+            await Delivery.updateMany(
+                { order_id: order._id },
+                { $set: updateData }
+            );
+        }
 
         res.json({
             success: true,

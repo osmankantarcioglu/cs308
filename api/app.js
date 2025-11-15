@@ -15,6 +15,8 @@ var ordersRouter = require('./routes/orders');
 var adminRouter = require('./routes/admin');
 var categoriesRouter = require('./routes/categories');
 var authRouter = require('./routes/auth');
+var deliveriesRouter = require('./routes/deliveries');
+var reviewsRouter = require('./routes/reviews');
 
 var app = express();
 
@@ -45,6 +47,8 @@ app.use('/cart', cartRouter); // http://localhost:3000/cart
 app.use('/orders', ordersRouter); // http://localhost:3000/orders
 app.use('/admin', adminRouter); // http://localhost:3000/admin
 app.use('/categories', categoriesRouter); // http://localhost:3000/categories
+app.use('/deliveries', deliveriesRouter); // http://localhost:3000/deliveries
+app.use('/reviews', reviewsRouter); // http://localhost:3000/reviews
 
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {
@@ -55,7 +59,9 @@ app.use(function(req, res, next) {
       req.path.startsWith('/orders') || 
       req.path.startsWith('/admin') || 
       req.path.startsWith('/auth') ||
-      req.path.startsWith('/categories')) {
+      req.path.startsWith('/categories') ||
+      req.path.startsWith('/deliveries') ||
+      req.path.startsWith('/reviews')) {
     return res.status(404).json({
       success: false,
       error: 'Endpoint not found'
@@ -73,7 +79,9 @@ app.use(function(err, req, res, next) {
                        req.path.startsWith('/orders') || 
                        req.path.startsWith('/admin') || 
                        req.path.startsWith('/auth') ||
-                       req.path.startsWith('/categories');
+                       req.path.startsWith('/categories') ||
+                       req.path.startsWith('/deliveries') ||
+                       req.path.startsWith('/reviews');
   
   if (isApiRequest) {
     // Return JSON error for API endpoints

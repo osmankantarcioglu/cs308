@@ -3,7 +3,7 @@ var router = express.Router();
 const Product = require('../db/models/Product');
 const { NotFoundError, ValidationError } = require('../lib/Error');
 const { authenticate } = require('../lib/auth');
-const { requireAdmin } = require('../lib/middleware');
+const { requireAdmin, requireAdminOrProductManager } = require('../lib/middleware');
 
 /**
  * @route   GET /products
@@ -114,47 +114,67 @@ router.get('/', async function(req, res, next) {
 });
 
 /**
- * @route   GET /products/:id
- * @desc    Get single product by ID
- * @query   incrementView=true to increment view count (optional)
+ * @route   GET /products/management
+ * @desc    Get products for internal dashboards (includes inactive items)
+ * @access  Admin or Product Manager
  */
-router.get('/:id', async function(req, res, next) {
+router.get('/management', authenticate, requireAdminOrProductManager, async function(req, res, next) {
     try {
-        const product = await Product.findById(req.params.id)
-            .populate('category', 'name')
-            .populate('created_by', 'username email')
-            .populate('updated_by', 'username email');
-        
-        if (!product) {
-            throw new NotFoundError('Product not found');
+        const {
+            category,
+            search,
+            status = 'all',
+            page = 1,
+            limit = 25
+        } = req.query;
+
+        const pageNum = Math.max(1, parseInt(page) || 1);
+        const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 25));
+        const skip = (pageNum - 1) * limitNum;
+
+        const query = {};
+
+        if (category) {
+            query.category = category;
         }
-        
-        // Only increment view count if explicitly requested via query param
-        if (req.query.incrementView === 'true') {
-            await Product.incrementViewCount(req.params.id);
-            
-            // Fetch updated product with new view count
-            const updatedProduct = await Product.findById(req.params.id)
+
+        if (status !== 'all') {
+            query.is_active = status === 'active';
+        }
+
+        if (search) {
+            query.$or = [
+                { name: { $regex: search, $options: 'i' } },
+                { description: { $regex: search, $options: 'i' } },
+                { distributor: { $regex: search, $options: 'i' } },
+                { model: { $regex: search, $options: 'i' } },
+            ];
+        }
+
+        const [products, total] = await Promise.all([
+            Product.find(query)
                 .populate('category', 'name')
-                .populate('created_by', 'username email')
-                .populate('updated_by', 'username email');
-            
-            return res.json({
-                success: true,
-                data: updatedProduct
-            });
-        }
-        
+                .populate('created_by', 'first_name last_name email')
+                .sort({ updatedAt: -1 })
+                .skip(skip)
+                .limit(limitNum),
+            Product.countDocuments(query)
+        ]);
+
         res.json({
             success: true,
-            data: product
+            data: {
+                products,
+                pagination: {
+                    page: pageNum,
+                    limit: limitNum,
+                    total,
+                    pages: Math.ceil(total / limitNum)
+                }
+            }
         });
     } catch (error) {
-        if (error.name === 'CastError') {
-            next(new NotFoundError('Invalid product ID'));
-        } else {
-            next(error);
-        }
+        next(error);
     }
 });
 
@@ -163,7 +183,7 @@ router.get('/:id', async function(req, res, next) {
  * @desc    Create a new product
  * @body    { name, description, quantity, price, category, ... }
  */
-router.post('/', async function(req, res, next) {
+router.post('/', authenticate, requireAdminOrProductManager, async function(req, res, next) {
     try {
         const {
             name,
@@ -233,7 +253,7 @@ router.post('/', async function(req, res, next) {
  * @desc    Update a product
  * @body    { name, description, quantity, price, ... }
  */
-router.put('/:id', async function(req, res, next) {
+router.put('/:id', authenticate, requireAdminOrProductManager, async function(req, res, next) {
     try {
         const {
             name,
@@ -301,7 +321,7 @@ router.put('/:id', async function(req, res, next) {
  * @desc    Delete a product (soft delete by setting is_active to false)
  * @access  Admin only
  */
-router.delete('/:id', authenticate, requireAdmin, async function(req, res, next) {
+router.delete('/:id', authenticate, requireAdminOrProductManager, async function(req, res, next) {
     try {
         const product = await Product.findById(req.params.id);
         
@@ -361,7 +381,7 @@ router.delete('/:id/hard', authenticate, requireAdmin, async function(req, res, 
  * @desc    Increase product stock quantity
  * @body    { quantity: number }
  */
-router.post('/:id/stock/increase', async function(req, res, next) {
+router.post('/:id/stock/increase', authenticate, requireAdminOrProductManager, async function(req, res, next) {
     try {
         const { quantity } = req.body;
         
@@ -394,7 +414,7 @@ router.post('/:id/stock/increase', async function(req, res, next) {
  * @desc    Decrease product stock quantity
  * @body    { quantity: number }
  */
-router.post('/:id/stock/decrease', async function(req, res, next) {
+router.post('/:id/stock/decrease', authenticate, requireAdminOrProductManager, async function(req, res, next) {
     try {
         const { quantity } = req.body;
         
@@ -461,6 +481,51 @@ router.get('/:id/purchased', async function(req, res, next) {
             data: {
                 hasPurchased: orders.length > 0
             }
+        });
+    } catch (error) {
+        if (error.name === 'CastError') {
+            next(new NotFoundError('Invalid product ID'));
+        } else {
+            next(error);
+        }
+    }
+});
+
+/**
+ * @route   GET /products/:id
+ * @desc    Get single product by ID
+ * @query   incrementView=true to increment view count (optional)
+ */
+router.get('/:id', async function(req, res, next) {
+    try {
+        const product = await Product.findById(req.params.id)
+            .populate('category', 'name')
+            .populate('created_by', 'username email')
+            .populate('updated_by', 'username email');
+        
+        if (!product) {
+            throw new NotFoundError('Product not found');
+        }
+        
+        // Only increment view count if explicitly requested via query param
+        if (req.query.incrementView === 'true') {
+            await Product.incrementViewCount(req.params.id);
+            
+            // Fetch updated product with new view count
+            const updatedProduct = await Product.findById(req.params.id)
+                .populate('category', 'name')
+                .populate('created_by', 'username email')
+                .populate('updated_by', 'username email');
+            
+            return res.json({
+                success: true,
+                data: updatedProduct
+            });
+        }
+        
+        res.json({
+            success: true,
+            data: product
         });
     } catch (error) {
         if (error.name === 'CastError') {
