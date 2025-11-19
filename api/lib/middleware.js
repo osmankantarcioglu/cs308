@@ -42,10 +42,25 @@ const requireAdminOrSalesManager = requireRole(
     Enum.USER_ROLES.SALES_MANAGER
 );
 
+/**
+ * Middleware to require support agent role
+ */
+const requireSupportAgent = requireRole(Enum.USER_ROLES.SUPPORT_AGENT);
+
+/**
+ * Middleware to require admin or support agent role
+ */
+const requireAdminOrSupportAgent = requireRole(
+    Enum.USER_ROLES.ADMIN,
+    Enum.USER_ROLES.SUPPORT_AGENT
+);
+
 module.exports = {
     requireRole,
     requireAdmin,
     requireAdminOrProductManager,
-    requireAdminOrSalesManager
+    requireAdminOrSalesManager,
+    requireSupportAgent,
+    requireAdminOrSupportAgent
 };
 

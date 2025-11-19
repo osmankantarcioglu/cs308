@@ -19,6 +19,10 @@ if (process.env.STRIPE_SECRET_KEY) {
     console.warn('   Add STRIPE_SECRET_KEY to your .env file to enable payments.');
 }
 
+const generateRefundNumber = () => {
+    return `RFD-${Date.now()}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
+};
+
 /**
  * @route   POST /orders/create-checkout-session
  * @desc    Create Stripe checkout session
@@ -701,21 +705,25 @@ router.post('/:id/refund', authenticate, async function(req, res, next) {
             throw new ValidationError('Refund request already exists for this order');
         }
         
-        // Create refund request
-        const refund = new Refund({
+        // Create refund requests for each item in the order
+        const refundEntries = order.items.map((item) => ({
+            refund_number: generateRefundNumber(),
             order_id: order._id,
             customer_id: req.user._id,
-            amount: order.total_amount,
+            product_id: item.product_id,
+            quantity: item.quantity,
+            purchase_price: item.price_at_time,
+            refund_amount: item.price_at_time * item.quantity,
             reason: reason || 'Customer requested refund',
             status: Enum.REFUND_STATUS.PENDING
-        });
-        
-        await refund.save();
+        }));
+
+        const createdRefunds = await Refund.insertMany(refundEntries);
         
         res.json({
             success: true,
             message: 'Refund request submitted successfully',
-            data: refund
+            data: createdRefunds
         });
     } catch (error) {
         if (error.name === 'CastError') {

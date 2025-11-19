@@ -75,8 +75,40 @@ const authenticate = async (req, res, next) => {
     }
 };
 
+/**
+ * Optional authentication - attaches req.user if token exists and is valid
+ * Does not throw error if token is missing or invalid
+ */
+const optionalAuthenticate = async (req, res, next) => {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return next();
+    }
+
+    const token = authHeader.substring(7);
+
+    if (!token) {
+        return next();
+    }
+
+    try {
+        const decoded = jwt.verify(token, config.JWT.SECRET);
+        const user = await Users.findById(decoded.userId).select('-password');
+
+        if (user && user.is_active) {
+            req.user = user;
+        }
+    } catch (error) {
+        console.warn('Optional authentication failed:', error.message);
+    } finally {
+        next();
+    }
+};
+
 module.exports = {
     generateToken,
-    authenticate
+    authenticate,
+    optionalAuthenticate
 };
 
