@@ -18,8 +18,15 @@ import CheckoutSuccessPage from "./pages/CheckoutSuccessPage";
 import AdminPage from "./pages/AdminPage";
 import AdminLoginPage from "./pages/AdminLoginPage";
 import AdminRoute from "./components/AdminRoute";
+import ProductManagerRoute from "./components/ProductManagerRoute";
+import SupportAgentRoute from "./components/SupportAgentRoute";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
+import ProductManagerLoginPage from "./pages/ProductManagerLoginPage";
+import ProductManagerDashboard from "./pages/ProductManagerDashboard";
+import SupportAgentLoginPage from "./pages/SupportAgentLoginPage";
+import SupportAgentDashboard from "./pages/SupportAgentDashboard";
+import CustomerChatWidget from "./components/CustomerChatWidget";
 
 export default function App() {
   return (
@@ -51,7 +58,12 @@ export default function App() {
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/admin" element={<AdminLoginPage />} />
           <Route path="/admin/dashboard" element={<AdminRoute><AdminPage /></AdminRoute>} />
+          <Route path="/product-manager" element={<ProductManagerLoginPage />} />
+          <Route path="/product-manager/dashboard" element={<ProductManagerRoute><ProductManagerDashboard /></ProductManagerRoute>} />
+          <Route path="/support" element={<SupportAgentLoginPage />} />
+          <Route path="/support/dashboard" element={<SupportAgentRoute><SupportAgentDashboard /></SupportAgentRoute>} />
             </Routes>
+            <CustomerChatWidget />
             <Footer />
           </div>
         </WishlistProvider>

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
-export default function SupportAgentLoginPage() {
+export default function ProductManagerLoginPage() {
   const navigate = useNavigate();
   const { login } = useAuth();
   const [email, setEmail] = useState("");
@@ -19,10 +19,10 @@ export default function SupportAgentLoginPage() {
       const result = await login(email, password);
 
       if (result.success && result.user) {
-        if (result.user.role === "support_agent") {
-          navigate("/support/dashboard", { replace: true });
+        if (result.user.role === "product_manager") {
+          navigate("/product-manager/dashboard", { replace: true });
         } else {
-          setError("Access denied. Support credentials required.");
+          setError("Access denied. Product manager credentials required.");
           localStorage.removeItem("token");
           localStorage.removeItem("user");
         }
@@ -37,59 +37,59 @@ export default function SupportAgentLoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-950 via-indigo-900 to-purple-950 py-16 px-4">
-      <div className="max-w-4xl w-full grid md:grid-cols-2 gap-6">
-        <div className="bg-white/5 backdrop-blur-xl rounded-3xl border border-white/10 p-10 text-white shadow-2xl shadow-purple-900/40">
-          <div className="inline-flex items-center px-4 py-1 rounded-full bg-white/10 border border-white/20 text-sm mb-6">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 py-16 px-4">
+      <div className="max-w-3xl w-full grid md:grid-cols-2 gap-6">
+        <div className="bg-slate-900/70 backdrop-blur-xl rounded-3xl border border-white/5 p-10 text-white shadow-2xl shadow-indigo-900/40">
+          <div className="inline-flex items-center px-4 py-1 rounded-full bg-indigo-500/20 border border-indigo-400/40 text-sm mb-6">
             <span className="w-2 h-2 bg-emerald-400 rounded-full mr-2"></span>
-            Live Support Network
+            Secure Ops Portal
           </div>
           <h1 className="text-4xl font-extrabold tracking-tight mb-4">
-            Support Agent Access
+            Product Operations Login
           </h1>
-          <p className="text-purple-100 leading-relaxed">
-            Jump into the live chat queue, claim conversations, and help customers in real-time.
-            Secure access for verified support specialists only.
+          <p className="text-slate-300 leading-relaxed">
+            Manage inventory fulfillment, oversee deliveries, and keep every shipment on track.
+            Exclusively for authorized product managers.
           </p>
-          <div className="mt-10 space-y-4 text-sm text-purple-100">
+          <div className="mt-10 space-y-4">
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M21 12.79A9 9 0 1111.21 3H12a9 9 0 019 9v.79z" />
+              <div className="w-10 h-10 rounded-2xl bg-indigo-500/20 flex items-center justify-center">
+                <svg className="w-5 h-5 text-indigo-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M3 7h18M3 12h18M3 17h18" />
                 </svg>
               </div>
-              <p>Monitor live customer queue</p>
+              <p className="text-sm text-slate-300">Live delivery statuses</p>
             </div>
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M3 5h12M9 3v2m6 4H3m6 4H3m6 4H3" />
+              <div className="w-10 h-10 rounded-2xl bg-indigo-500/20 flex items-center justify-center">
+                <svg className="w-5 h-5 text-indigo-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
-              <p>Access customer context instantly</p>
+              <p className="text-sm text-slate-300">Enterprise-grade access control</p>
             </div>
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M17 8h2a2 2 0 012 2v7a2 2 0 01-2 2h-7l-4 4v-4H5a2 2 0 01-2-2v-7a2 2 0 012-2h2" />
+              <div className="w-10 h-10 rounded-2xl bg-indigo-500/20 flex items-center justify-center">
+                <svg className="w-5 h-5 text-indigo-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 8c-1.657 0-3-1.343-3-3s1.343-3 3-3 3 1.343 3 3-1.343 3-3 3zm0 0v13" />
                 </svg>
               </div>
-              <p>Reply with text, files, images, and video</p>
+              <p className="text-sm text-slate-300">Unified inventory + delivery view</p>
             </div>
           </div>
         </div>
 
         <div className="bg-white rounded-3xl shadow-2xl p-10">
           <div className="text-center mb-8">
-            <div className="mx-auto w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center shadow-lg shadow-purple-500/40 mb-4">
+            <div className="mx-auto w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/40 mb-4">
               <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M18 10c0-3.866-3.582-7-8-7S2 6.134 2 10v4a3 3 0 003 3h1v4l4-4h2" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 12l2 2 4-4m2-4h-3.38a1 1 0 00-.94.657l-.34 1.023a1 1 0 01-.94.657H9.9a1 1 0 00-.94.657L8.62 12.38a1 1 0 01-.94.657H4" />
               </svg>
             </div>
             <h2 className="text-2xl font-bold text-slate-900">
-              Secure login
+              Product Manager Access
             </h2>
-            <p className="text-slate-500 text-sm mt-1">Support agents only</p>
+            <p className="text-slate-500 text-sm mt-1">Authorized personnel only</p>
           </div>
 
           <form className="space-y-5" onSubmit={handleLogin}>
@@ -103,7 +103,7 @@ export default function SupportAgentLoginPage() {
             )}
 
             <div>
-              <label className="block text-sm font-semibold text-slate-600 mb-2">
+              <label htmlFor="pm-email" className="block text-sm font-semibold text-slate-600 mb-2">
                 Work Email
               </label>
               <div className="relative">
@@ -113,18 +113,21 @@ export default function SupportAgentLoginPage() {
                   </svg>
                 </div>
                 <input
+                  id="pm-email"
+                  name="email"
                   type="email"
+                  autoComplete="email"
+                  required
+                  className="appearance-none block w-full pl-10 px-4 py-3 border border-slate-200 rounded-2xl placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  placeholder="you@company.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  required
-                  className="appearance-none block w-full pl-10 px-4 py-3 border border-slate-200 rounded-2xl placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  placeholder="agent@support.com"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-slate-600 mb-2">
+              <label htmlFor="pm-password" className="block text-sm font-semibold text-slate-600 mb-2">
                 Password
               </label>
               <div className="relative">
@@ -134,12 +137,15 @@ export default function SupportAgentLoginPage() {
                   </svg>
                 </div>
                 <input
+                  id="pm-password"
+                  name="password"
                   type="password"
+                  autoComplete="current-password"
+                  required
+                  className="appearance-none block w-full pl-10 px-4 py-3 border border-slate-200 rounded-2xl placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  placeholder="Enter secure password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  required
-                  className="appearance-none block w-full pl-10 px-4 py-3 border border-slate-200 rounded-2xl placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  placeholder="Enter secure password"
                 />
               </div>
             </div>
@@ -147,9 +153,9 @@ export default function SupportAgentLoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 text-white font-semibold shadow-lg shadow-purple-500/30 hover:shadow-xl transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+              className="w-full py-3 rounded-2xl bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white font-semibold shadow-lg shadow-indigo-500/30 hover:shadow-xl transition-all disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {loading ? "Validating..." : "Sign in to Support Desk"}
+              {loading ? "Validating access..." : "Sign in to Ops Center"}
             </button>
           </form>
 
@@ -166,6 +172,5 @@ export default function SupportAgentLoginPage() {
     </div>
   );
 }
-
 
 

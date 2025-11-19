@@ -90,6 +90,11 @@ export default function ProfilePage() {
       
       if (response.ok) {
         alert('Refund request submitted successfully');
+        setOrders((prev) =>
+          prev.map((order) =>
+            order._id === orderId ? { ...order, refundRequested: true } : order
+          )
+        );
       } else {
         const errorData = await response.json();
         alert(`Error: ${errorData.error}`);
@@ -373,12 +378,18 @@ export default function ProfilePage() {
                       
                       {order.status === 'delivered' && (
                         <>
-                          <button
-                            onClick={() => handleRequestRefund(order._id)}
-                            className="px-4 py-2 bg-yellow-500 text-white font-semibold rounded-lg hover:bg-yellow-600 transition-colors"
-                          >
-                            Request Refund
-                          </button>
+                          {order.refundRequested ? (
+                            <span className="px-4 py-2 bg-yellow-100 text-yellow-800 font-semibold rounded-lg">
+                              Refund Requested
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => handleRequestRefund(order._id)}
+                              className="px-4 py-2 bg-yellow-500 text-white font-semibold rounded-lg hover:bg-yellow-600 transition-colors"
+                            >
+                              Request Refund
+                            </button>
+                          )}
                           {order.items.map((item) => (
                             <Link
                               key={item.product_id?._id}
