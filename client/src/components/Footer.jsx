@@ -83,9 +83,9 @@ export default function Footer() {
               © 2025 TechHub. All rights reserved.
             </p>
             <div className="flex space-x-6 text-sm">
-              <a href="#" className="hover:text-white transition-colors">Privacy Policy</a>
-              <a href="#" className="hover:text-white transition-colors">Terms of Service</a>
-              <a href="#" className="hover:text-white transition-colors">Cookie Policy</a>
+              <a href="/privacy" className="hover:text-white transition-colors">Privacy Policy</a>
+              <a href="/terms" className="hover:text-white transition-colors">Terms of Service</a>
+              <a href="/cookies" className="hover:text-white transition-colors">Cookie Policy</a>
             </div>
           </div>
         </div>

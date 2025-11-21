@@ -27,6 +27,9 @@ import ProductManagerDashboard from "./pages/ProductManagerDashboard";
 import SupportAgentLoginPage from "./pages/SupportAgentLoginPage";
 import SupportAgentDashboard from "./pages/SupportAgentDashboard";
 import AboutPage from "./pages/AboutPage";
+import PrivacyPolicyPage from "./pages/PrivacyPolicyPage";
+import TermsOfServicePage from "./pages/TermsOfServicePage";
+import CookiePolicyPage from "./pages/CookiePolicyPage";
 import CustomerChatWidget from "./components/CustomerChatWidget";
 
 export default function App() {
@@ -58,6 +61,9 @@ export default function App() {
           <Route path="/about" element={<AboutPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
+          <Route path="/privacy" element={<PrivacyPolicyPage />} />
+          <Route path="/terms" element={<TermsOfServicePage />} />
+          <Route path="/cookies" element={<CookiePolicyPage />} />
           <Route path="/admin" element={<AdminLoginPage />} />
           <Route path="/admin/dashboard" element={<AdminRoute><AdminPage /></AdminRoute>} />
           <Route path="/product-manager" element={<ProductManagerLoginPage />} />
