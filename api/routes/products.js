@@ -1,9 +1,12 @@
 var express = require('express');
 var router = express.Router();
 const Product = require('../db/models/Product');
+const Review = require('../db/models/Review');
+const Order = require('../db/models/Order');
+const Enum = require('../config/Enum');
 const { NotFoundError, ValidationError } = require('../lib/Error');
-const { authenticate } = require('../lib/auth');
-const { requireAdmin } = require('../lib/middleware');
+const { authenticate, optionalAuthenticate } = require('../lib/auth');
+const { requireAdmin, requireAdminOrProductManager } = require('../lib/middleware');
 
 /**
  * @route   GET /products
@@ -114,39 +117,67 @@ router.get('/', async function(req, res, next) {
 });
 
 /**
- * @route   GET /products/:id
- * @desc    Get single product by ID
+ * @route   GET /products/management
+ * @desc    Get products for internal dashboards (includes inactive items)
+ * @access  Admin or Product Manager
  */
-router.get('/:id', async function(req, res, next) {
+router.get('/management', authenticate, requireAdminOrProductManager, async function(req, res, next) {
     try {
-        const product = await Product.findById(req.params.id)
-            .populate('category', 'name')
-            .populate('created_by', 'username email')
-            .populate('updated_by', 'username email');
-        
-        if (!product) {
-            throw new NotFoundError('Product not found');
+        const {
+            category,
+            search,
+            status = 'all',
+            page = 1,
+            limit = 25
+        } = req.query;
+
+        const pageNum = Math.max(1, parseInt(page) || 1);
+        const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 25));
+        const skip = (pageNum - 1) * limitNum;
+
+        const query = {};
+
+        if (category) {
+            query.category = category;
         }
-        
-        // Increment view count using model method
-        await Product.incrementViewCount(req.params.id);
-        
-        // Fetch updated product
-        const updatedProduct = await Product.findById(req.params.id)
-            .populate('category', 'name')
-            .populate('created_by', 'username email')
-            .populate('updated_by', 'username email');
-        
+
+        if (status !== 'all') {
+            query.is_active = status === 'active';
+        }
+
+        if (search) {
+            query.$or = [
+                { name: { $regex: search, $options: 'i' } },
+                { description: { $regex: search, $options: 'i' } },
+                { distributor: { $regex: search, $options: 'i' } },
+                { model: { $regex: search, $options: 'i' } },
+            ];
+        }
+
+        const [products, total] = await Promise.all([
+            Product.find(query)
+                .populate('category', 'name')
+                .populate('created_by', 'first_name last_name email')
+                .sort({ updatedAt: -1 })
+                .skip(skip)
+                .limit(limitNum),
+            Product.countDocuments(query)
+        ]);
+
         res.json({
             success: true,
-            data: updatedProduct
+            data: {
+                products,
+                pagination: {
+                    page: pageNum,
+                    limit: limitNum,
+                    total,
+                    pages: Math.ceil(total / limitNum)
+                }
+            }
         });
     } catch (error) {
-        if (error.name === 'CastError') {
-            next(new NotFoundError('Invalid product ID'));
-        } else {
-            next(error);
-        }
+        next(error);
     }
 });
 
@@ -155,7 +186,7 @@ router.get('/:id', async function(req, res, next) {
  * @desc    Create a new product
  * @body    { name, description, quantity, price, category, ... }
  */
-router.post('/', async function(req, res, next) {
+router.post('/', authenticate, requireAdminOrProductManager, async function(req, res, next) {
     try {
         const {
             name,
@@ -225,7 +256,7 @@ router.post('/', async function(req, res, next) {
  * @desc    Update a product
  * @body    { name, description, quantity, price, ... }
  */
-router.put('/:id', async function(req, res, next) {
+router.put('/:id', authenticate, requireAdminOrProductManager, async function(req, res, next) {
     try {
         const {
             name,
@@ -293,7 +324,7 @@ router.put('/:id', async function(req, res, next) {
  * @desc    Delete a product (soft delete by setting is_active to false)
  * @access  Admin only
  */
-router.delete('/:id', authenticate, requireAdmin, async function(req, res, next) {
+router.delete('/:id', authenticate, requireAdminOrProductManager, async function(req, res, next) {
     try {
         const product = await Product.findById(req.params.id);
         
@@ -353,7 +384,7 @@ router.delete('/:id/hard', authenticate, requireAdmin, async function(req, res, 
  * @desc    Increase product stock quantity
  * @body    { quantity: number }
  */
-router.post('/:id/stock/increase', async function(req, res, next) {
+router.post('/:id/stock/increase', authenticate, requireAdminOrProductManager, async function(req, res, next) {
     try {
         const { quantity } = req.body;
         
@@ -386,7 +417,7 @@ router.post('/:id/stock/increase', async function(req, res, next) {
  * @desc    Decrease product stock quantity
  * @body    { quantity: number }
  */
-router.post('/:id/stock/decrease', async function(req, res, next) {
+router.post('/:id/stock/decrease', authenticate, requireAdminOrProductManager, async function(req, res, next) {
     try {
         const { quantity } = req.body;
         
@@ -410,6 +441,226 @@ router.post('/:id/stock/decrease', async function(req, res, next) {
             success: true,
             message: 'Stock decreased successfully',
             data: updatedProduct
+        });
+    } catch (error) {
+        if (error.name === 'CastError') {
+            next(new NotFoundError('Invalid product ID'));
+        } else {
+            next(error);
+        }
+    }
+});
+
+/**
+ * @route   GET /products/:id/reviews
+ * @desc    Fetch approved, visible reviews for a product
+ */
+router.get('/:id/reviews', async function(req, res, next) {
+    try {
+        // Ensure product exists to avoid leaking data
+        const productExists = await Product.exists({ _id: req.params.id });
+
+        if (!productExists) {
+            throw new NotFoundError('Product not found');
+        }
+
+        const [visibleReviews, ratingDocuments] = await Promise.all([
+            Review.find({
+                product_id: req.params.id,
+                status: Enum.REVIEW_STATUS.APPROVED,
+                is_visible: true
+            })
+            .populate('customer_id', 'first_name last_name role')
+            .sort({ createdAt: -1 }),
+            Review.find({
+                product_id: req.params.id,
+                rating: { $gte: 1 }
+            }).select('rating')
+        ]);
+
+        const reviewCount = ratingDocuments.length;
+        const averageRating = reviewCount
+            ? Number((ratingDocuments.reduce((sum, review) => sum + (review.rating || 0), 0) / reviewCount).toFixed(1))
+            : 0;
+
+        res.json({
+            success: true,
+            data: {
+                reviews: visibleReviews,
+                reviewCount,
+                averageRating
+            }
+        });
+    } catch (error) {
+        if (error.name === 'CastError') {
+            next(new NotFoundError('Invalid product ID'));
+        } else {
+            next(error);
+        }
+    }
+});
+
+/**
+ * @route   POST /products/:id/reviews
+ * @desc    Submit or update a review for a product
+ */
+router.post('/:id/reviews', authenticate, async function(req, res, next) {
+    try {
+        const { rating, comment } = req.body;
+        const parsedRating = Number(rating);
+        const trimmedComment = (comment || '').trim();
+
+        if (!parsedRating || parsedRating < 1 || parsedRating > 5) {
+            throw new ValidationError('Rating must be between 1 and 5 stars');
+        }
+
+        if (!trimmedComment) {
+            throw new ValidationError('Comment is required');
+        }
+
+        const product = await Product.findById(req.params.id);
+
+        if (!product) {
+            throw new NotFoundError('Product not found');
+        }
+
+        let relatedOrder = null;
+
+        if (req.user.role === Enum.USER_ROLES.CUSTOMER) {
+            relatedOrder = await Order.findOne({
+                customer_id: req.user._id,
+                payment_status: Enum.PAYMENT_STATUS.COMPLETED,
+                'items.product_id': req.params.id
+            }).sort({ createdAt: -1 });
+
+            if (!relatedOrder) {
+                throw new ValidationError('You must purchase this product before leaving a review.');
+            }
+        } else {
+            relatedOrder = await Order.findOne({
+                customer_id: req.user._id,
+                'items.product_id': req.params.id
+            }).sort({ createdAt: -1 }) || null;
+        }
+
+        let review = await Review.findOne({
+            product_id: req.params.id,
+            customer_id: req.user._id
+        });
+
+        if (review) {
+            review.rating = parsedRating;
+            review.comment = trimmedComment;
+            review.order_id = relatedOrder ? relatedOrder._id : review.order_id;
+            review.status = Enum.REVIEW_STATUS.PENDING;
+            review.is_visible = false;
+            review.updated_by = req.user._id;
+            await review.save();
+        } else {
+            review = await Review.create({
+                product_id: req.params.id,
+                customer_id: req.user._id,
+                order_id: relatedOrder ? relatedOrder._id : undefined,
+                rating: parsedRating,
+                comment: trimmedComment,
+                status: Enum.REVIEW_STATUS.PENDING,
+                is_visible: false,
+                created_by: req.user._id,
+                updated_by: req.user._id
+            });
+        }
+
+        res.status(201).json({
+            success: true,
+            message: 'Review submitted and awaiting approval',
+            data: review
+        });
+    } catch (error) {
+        if (error.code === 11000) {
+            next(new ValidationError('You have already submitted a review for this product.'));
+        } else if (error.name === 'CastError') {
+            next(new NotFoundError('Invalid product ID'));
+        } else {
+            next(error);
+        }
+    }
+});
+
+/**
+ * @route   GET /products/:id/purchased
+ * @desc    Check if the current user has purchased this product
+ */
+router.get('/:id/purchased', optionalAuthenticate, async function(req, res, next) {
+    try {
+        const userId = req.user?._id;
+        
+        if (!userId) {
+            // Guest users haven't purchased anything
+            return res.json({
+                success: true,
+                data: {
+                    hasPurchased: false
+                }
+            });
+        }
+        
+        // Check if user has any completed order containing this product
+        const orders = await Order.find({
+            customer_id: userId,
+            payment_status: Enum.PAYMENT_STATUS.COMPLETED,
+            'items.product_id': req.params.id
+        });
+        
+        res.json({
+            success: true,
+            data: {
+                hasPurchased: orders.length > 0
+            }
+        });
+    } catch (error) {
+        if (error.name === 'CastError') {
+            next(new NotFoundError('Invalid product ID'));
+        } else {
+            next(error);
+        }
+    }
+});
+
+/**
+ * @route   GET /products/:id
+ * @desc    Get single product by ID
+ * @query   incrementView=true to increment view count (optional)
+ */
+router.get('/:id', async function(req, res, next) {
+    try {
+        const product = await Product.findById(req.params.id)
+            .populate('category', 'name')
+            .populate('created_by', 'username email')
+            .populate('updated_by', 'username email');
+        
+        if (!product) {
+            throw new NotFoundError('Product not found');
+        }
+        
+        // Only increment view count if explicitly requested via query param
+        if (req.query.incrementView === 'true') {
+            await Product.incrementViewCount(req.params.id);
+            
+            // Fetch updated product with new view count
+            const updatedProduct = await Product.findById(req.params.id)
+                .populate('category', 'name')
+                .populate('created_by', 'username email')
+                .populate('updated_by', 'username email');
+            
+            return res.json({
+                success: true,
+                data: updatedProduct
+            });
+        }
+        
+        res.json({
+            success: true,
+            data: product
         });
     } catch (error) {
         if (error.name === 'CastError') {

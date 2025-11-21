@@ -1,11 +1,17 @@
-const express = require("express")
-const router = express.Router()
-const Users = require("../db/models/Users")
-const { NotFoundError, ValidationError } = require("../lib/Error")
-const bcrypt = require("bcrypt")
-const jwt = require("jsonwebtoken")
+// api/routes/users.js
+var express = require('express');
+var router = express.Router();
+const Users = require('../db/models/Users');
+const Wishlist = require('../db/models/Wishlist');
+const { NotFoundError, ValidationError } = require('../lib/Error');
+const { authenticate } = require('../lib/auth');
 
-router.get("/", async function (req, res, next) {
+/**
+ * @route   GET /users
+ * @desc    List users (filters + pagination)
+ * @query   role, search, is_active, page=1, limit=10
+ */
+router.get('/', async function (req, res, next) {
   try {
     const { role, search, is_active, page = 1, limit = 10 } = req.query
 
@@ -82,9 +88,13 @@ router.get("/role/:role", async function (req, res, next) {
   } catch (err) {
     next(err)
   }
-})
+});
 
-router.get("/:id", async function (req, res, next) {
+/**
+ * @route   GET /users/:id
+ * @desc    Get single user
+ */
+router.get('/:id', async function (req, res, next) {
   try {
     const user = await Users.findById(req.params.id).select("-password")
     if (!user) throw new NotFoundError("User not found")
