@@ -26,6 +26,7 @@ import ProductManagerLoginPage from "./pages/ProductManagerLoginPage";
 import ProductManagerDashboard from "./pages/ProductManagerDashboard";
 import SupportAgentLoginPage from "./pages/SupportAgentLoginPage";
 import SupportAgentDashboard from "./pages/SupportAgentDashboard";
+import AboutPage from "./pages/AboutPage";
 import CustomerChatWidget from "./components/CustomerChatWidget";
 
 export default function App() {
@@ -54,6 +55,7 @@ export default function App() {
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/checkout" element={<CheckoutPage />} />
           <Route path="/checkout/success" element={<CheckoutSuccessPage />} />
+          <Route path="/about" element={<AboutPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/admin" element={<AdminLoginPage />} />
