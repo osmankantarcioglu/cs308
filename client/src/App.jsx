@@ -31,6 +31,7 @@ import PrivacyPolicyPage from "./pages/PrivacyPolicyPage";
 import TermsOfServicePage from "./pages/TermsOfServicePage";
 import CookiePolicyPage from "./pages/CookiePolicyPage";
 import CustomerChatWidget from "./components/CustomerChatWidget";
+import CategoriesPage from "./pages/CategoriesPage";
 
 export default function App() {
   return (
@@ -52,6 +53,7 @@ export default function App() {
             }
           />
           <Route path="/products" element={<ProductsPage />} />
+          <Route path="/categories" element={<CategoriesPage />} />
           <Route path="/products/:id" element={<ProductDetailPage />} />
           <Route path="/basket" element={<BasketPage />} />
           <Route path="/wishlist" element={<WishlistPage />} />
