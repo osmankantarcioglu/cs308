@@ -1095,7 +1095,7 @@ export default function ProductManagerDashboard() {
                       <p>
                         {review.customer_id?.first_name} {review.customer_id?.last_name}
                       </p>
-                      <p className="font-semibold text-amber-300">{review.rating}/10</p>
+                      <p className="font-semibold text-amber-300">{review.rating}/5</p>
                     </div>
                     <p className="text-white font-semibold mt-2">{review.product_id?.name}</p>
                     <p className="text-slate-300 text-sm mt-3 whitespace-pre-line">{review.comment || "—"}</p>

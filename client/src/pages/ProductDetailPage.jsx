@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
@@ -10,7 +10,7 @@ export default function ProductDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { addToCart, cartItems } = useCart();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user, token } = useAuth();
   const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
   
   const [product, setProduct] = useState(null);
@@ -21,8 +21,21 @@ export default function ProductDetailPage() {
   const [hasPurchased, setHasPurchased] = useState(false);
   const [checkingPurchase, setCheckingPurchase] = useState(true);
   const [commentDraft, setCommentDraft] = useState("");
-  const [comments, setComments] = useState([]);
+  const [reviews, setReviews] = useState([]);
+  const [reviewsLoading, setReviewsLoading] = useState(true);
+  const [reviewError, setReviewError] = useState(null);
+  const [reviewStats, setReviewStats] = useState({ averageRating: 0, reviewCount: 0 });
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [reviewRating, setReviewRating] = useState(0);
+  const [submittingReview, setSubmittingReview] = useState(false);
   const viewCountedRef = useRef(false);
+  const isCustomerRole = user?.role === "customer";
+  const canSubmitReview = isAuthenticated && (!isCustomerRole || hasPurchased);
+  const reviewCtaMessage = !isAuthenticated
+    ? "Please login to share your experience."
+    : isCustomerRole && !hasPurchased
+      ? "You must purchase this product before leaving a review."
+      : null;
 
   // Check if product is already in cart
   const isProductInCart = () => {
@@ -50,6 +63,38 @@ export default function ProductDetailPage() {
       return false;
     });
   };
+
+  const fetchReviews = useCallback(async () => {
+    if (!id) return;
+
+    try {
+      setReviewsLoading(true);
+      setReviewError(null);
+
+      const response = await fetch(`${API_BASE_URL}/${id}/reviews`);
+
+      if (!response.ok) {
+        throw new Error(`Unable to load reviews (status ${response.status})`);
+      }
+
+      const data = await response.json();
+
+      if (data.success) {
+        setReviews(data.data.reviews || []);
+        setReviewStats({
+          averageRating: Number(data.data.averageRating ?? 0),
+          reviewCount: Number(data.data.reviewCount ?? 0),
+        });
+      } else {
+        throw new Error(data.error || "Unable to load reviews");
+      }
+    } catch (error) {
+      console.error("Error fetching reviews:", error);
+      setReviewError(error.message);
+    } finally {
+      setReviewsLoading(false);
+    }
+  }, [id]);
 
   // Fetch product details
   useEffect(() => {
@@ -91,20 +136,33 @@ export default function ProductDetailPage() {
     fetchProduct();
   }, [id]);
 
+  useEffect(() => {
+    fetchReviews();
+  }, [fetchReviews]);
+
   // Check if user has purchased this product
   useEffect(() => {
     const checkPurchaseStatus = async () => {
       try {
         setCheckingPurchase(true);
-        const response = await fetch(`${API_BASE_URL}/${id}/purchased`, {
-          credentials: 'include'
-        });
+        const fetchOptions = {
+          credentials: 'include',
+          headers: {}
+        };
+
+        if (token) {
+          fetchOptions.headers.Authorization = `Bearer ${token}`;
+        }
+
+        const response = await fetch(`${API_BASE_URL}/${id}/purchased`, fetchOptions);
         
         if (response.ok) {
           const data = await response.json();
           if (data.success) {
             setHasPurchased(data.data.hasPurchased);
           }
+        } else if (response.status === 401) {
+          setHasPurchased(false);
         }
       } catch (error) {
         console.error('Error checking purchase status:', error);
@@ -115,7 +173,7 @@ export default function ProductDetailPage() {
     };
     
     checkPurchaseStatus();
-  }, [id]);
+  }, [id, token]);
 
   const handleQuantityChange = (newQuantity) => {
     if (newQuantity < 1) {
@@ -144,25 +202,89 @@ export default function ProductDetailPage() {
     setAddingToCart(false);
   };
 
-  const handleAddComment = () => {
-    if (!hasPurchased) {
-      alert('You must purchase this product before posting a comment.');
+  const handleSubmitReview = async () => {
+    if (!isAuthenticated) {
+      navigate('/login');
+      return;
+    }
+
+    if (!canSubmitReview) {
+      alert('You must purchase this product before leaving a review.');
+      return;
+    }
+
+    if (!token) {
+      alert('Authentication token missing. Please login again.');
       return;
     }
     
     const message = commentDraft.trim();
     if (!message) {
+      alert('Please enter a comment to submit your review.');
       return;
     }
 
-    const newComment = {
-      id: `${id}-${Date.now()}`,
-      message,
-      createdAt: new Date().toISOString(),
-    };
-    
-    setComments([newComment, ...comments]);
-    setCommentDraft("");
+    if (!reviewRating) {
+      alert('Please select a star rating.');
+      return;
+    }
+
+    try {
+      setSubmittingReview(true);
+      const response = await fetch(`${API_BASE_URL}/${id}/reviews`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          rating: reviewRating,
+          comment: message
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Unable to submit review');
+      }
+
+      alert('Review submitted! It will appear once approved.');
+      setShowReviewModal(false);
+      setCommentDraft("");
+      setReviewRating(0);
+      fetchReviews();
+    } catch (error) {
+      console.error('Error submitting review:', error);
+      alert(error.message || 'Unable to submit review. Please try again.');
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
+
+  const renderStars = (value = 0) => {
+    const roundedValue = Math.round(value);
+
+    return (
+      <div className="flex items-center gap-1">
+        {[1, 2, 3, 4, 5].map((star) => (
+          <svg
+            key={star}
+            className={`w-4 h-4 ${star <= roundedValue ? "text-yellow-400" : "text-gray-300"}`}
+            fill={star <= roundedValue ? "currentColor" : "none"}
+            stroke="currentColor"
+            strokeWidth={1.5}
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M11.48 3.499a.75.75 0 011.04 0l2.155 2.137a.75.75 0 00.564.221l2.982-.062a.75.75 0 01.535 1.299l-2.126 2.153a.75.75 0 00-.213.621l.496 2.954a.75.75 0 01-1.084.79l-2.657-1.365a.75.75 0 00-.676 0l-2.657 1.365a.75.75 0 01-1.084-.79l.496-2.954a.75.75 0 00-.213-.621L5.244 7.094a.75.75 0 01.535-1.299l2.982.062a.75.75 0 00.564-.221L11.48 3.5z"
+            />
+          </svg>
+        ))}
+      </div>
+    );
   };
 
   const handleWishlistToggle = async () => {
@@ -194,6 +316,7 @@ export default function ProductDetailPage() {
           <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-primary mx-auto mb-4"></div>
           <p className="text-gray-600">Loading product...</p>
         </div>
+
       </div>
     );
   }
@@ -410,68 +533,168 @@ export default function ProductDetailPage() {
           </div>
         </div>
 
-        {/* Comments Section */}
+        {/* Reviews Section */}
         <div className="mt-8 bg-white rounded-xl shadow-lg p-6 sm:p-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6">Customer Comments</h2>
-          
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between mb-6">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">Customer Reviews</h2>
+              <p className="text-gray-600 mt-1">
+                See what other shoppers think about this product.
+              </p>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="text-center">
+                <div className="text-4xl font-bold text-primary">
+                  {(reviewStats.averageRating ?? 0).toFixed(1)}
+                </div>
+                <p className="text-sm text-gray-500">
+                  {reviewStats.reviewCount} review{reviewStats.reviewCount === 1 ? "" : "s"}
+                </p>
+              </div>
+              {renderStars(reviewStats.averageRating ?? 0)}
+            </div>
+            {canSubmitReview && !checkingPurchase && (
+              <button
+                onClick={() => setShowReviewModal(true)}
+                className="inline-flex items-center justify-center px-6 py-3 rounded-lg bg-primary text-white font-semibold hover:bg-primary-dark transition-colors"
+              >
+                Write a Review
+              </button>
+            )}
+          </div>
+
           {checkingPurchase ? (
             <div className="text-center py-8">
               <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary mx-auto"></div>
             </div>
-          ) : !hasPurchased ? (
-            <div className="p-6 bg-yellow-50 border border-yellow-200 rounded-lg mb-6">
-              <div className="flex items-start gap-4">
-                <svg className="w-6 h-6 text-yellow-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-                <div>
-                  <p className="font-semibold text-yellow-800 mb-1">Purchase Required</p>
-                  <p className="text-yellow-700">
-                    You must purchase this product before you can post comments.
-                  </p>
-                </div>
-              </div>
+          ) : reviewCtaMessage ? (
+            <div className="p-6 bg-yellow-50 border border-yellow-200 rounded-lg mb-6 text-yellow-800">
+              {reviewCtaMessage}
             </div>
+          ) : null}
+
+          {reviewError && (
+            <div className="p-4 bg-red-50 border border-red-200 rounded-lg mb-6 text-red-700">
+              {reviewError}
+            </div>
+          )}
+
+          {reviewsLoading ? (
+            <div className="text-center py-8">
+              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary mx-auto"></div>
+            </div>
+          ) : reviews.length === 0 ? (
+            <p className="text-gray-500 text-center py-8">
+              No reviews yet. Be the first to share your experience!
+            </p>
           ) : (
-            <div className="mb-6">
+            <div className="space-y-4">
+              {reviews.map((review) => (
+                <div key={review._id || review.id} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
+                    <div>
+                      <p className="font-semibold text-gray-900">
+                        {review?.customer_id
+                          ? `${review.customer_id.first_name} ${review.customer_id.last_name}`
+                          : "Verified Customer"}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        {review.createdAt ? new Date(review.createdAt).toLocaleString() : ""}
+                      </p>
+                    </div>
+                    {renderStars(review.rating)}
+                  </div>
+                  <p className="text-gray-700 whitespace-pre-line">{review.comment}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {showReviewModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+            <div className="bg-white rounded-2xl w-full max-w-lg p-6 relative">
+              <button
+                className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+                onClick={() => {
+                  if (!submittingReview) {
+                    setShowReviewModal(false);
+                  }
+                }}
+                aria-label="Close review modal"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+
+              <h3 className="text-2xl font-bold text-gray-900 mb-2">Share Your Experience</h3>
+              <p className="text-gray-600 mb-4">
+                Rate and review <span className="font-semibold text-gray-900">{product.name}</span>
+              </p>
+
+              <div className="flex items-center justify-center gap-2 mb-6">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    onClick={() => setReviewRating(star)}
+                    className="focus:outline-none"
+                  >
+                    <svg
+                      className={`w-10 h-10 ${star <= reviewRating ? "text-yellow-400" : "text-gray-300"}`}
+                      fill={star <= reviewRating ? "currentColor" : "none"}
+                      stroke="currentColor"
+                      strokeWidth={1.5}
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M11.48 3.499a.75.75 0 011.04 0l2.155 2.137a.75.75 0 00.564.221l2.982-.062a.75.75 0 01.535 1.299l-2.126 2.153a.75.75 0 00-.213.621l.496 2.954a.75.75 0 01-1.084.79l-2.657-1.365a.75.75 0 00-.676 0l-2.657 1.365a.75.75 0 01-1.084-.79l.496-2.954a.75.75 0 00-.213-.621L5.244 7.094a.75.75 0 01.535-1.299l2.982.062a.75.75 0 00.564-.221L11.48 3.5z"
+                      />
+                    </svg>
+                  </button>
+                ))}
+              </div>
+
               <textarea
                 value={commentDraft}
                 onChange={(e) => setCommentDraft(e.target.value)}
                 rows={4}
-                placeholder="Share your thoughts about this product..."
+                placeholder="Share details about what you liked or didn’t like..."
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
               />
-              <button
-                onClick={handleAddComment}
-                disabled={!commentDraft.trim()}
-                className={`mt-3 px-6 py-3 font-semibold rounded-lg transition-colors ${
-                  !commentDraft.trim()
-                    ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-                    : "text-white bg-primary hover:bg-primary-dark"
-                }`}
-              >
-                Post Comment
-              </button>
+
+              <div className="flex items-center justify-end gap-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!submittingReview) {
+                      setShowReviewModal(false);
+                    }
+                  }}
+                  className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 transition-colors"
+                  disabled={submittingReview}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSubmitReview}
+                  disabled={submittingReview || !commentDraft.trim() || !reviewRating}
+                  className={`px-6 py-3 rounded-lg font-semibold text-white transition-colors ${
+                    submittingReview || !commentDraft.trim() || !reviewRating
+                      ? "bg-gray-300 cursor-not-allowed"
+                      : "bg-primary hover:bg-primary-dark"
+                  }`}
+                >
+                  {submittingReview ? "Submitting..." : "Submit Review"}
+                </button>
+              </div>
             </div>
-          )}
-          
-          <div className="space-y-4">
-            {comments.length === 0 ? (
-              <p className="text-gray-500 text-center py-8">
-                No comments yet. Be the first to share your experience!
-              </p>
-            ) : (
-              comments.map((comment) => (
-                <div key={comment.id} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-                  <p className="text-gray-700 mb-2">{comment.message}</p>
-                  <p className="text-sm text-gray-400">
-                    {new Date(comment.createdAt).toLocaleString()}
-                  </p>
-                </div>
-              ))
-            )}
           </div>
-        </div>
+        )}
 
         {/* Back to Products */}
         <div className="mt-8 text-center">

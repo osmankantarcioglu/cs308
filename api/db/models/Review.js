@@ -15,13 +15,13 @@ const schema = mongoose.Schema({
     order_id: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Order",
-        required: true
+        required: false
     },
     rating: {
         type: Number,
         required: true,
         min: 1,
-        max: 10
+        max: 5
     },
     comment: {
         type: String
