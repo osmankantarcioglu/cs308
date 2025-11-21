@@ -1,8 +1,11 @@
 var express = require('express');
 var router = express.Router();
 const Product = require('../db/models/Product');
+const Review = require('../db/models/Review');
+const Order = require('../db/models/Order');
+const Enum = require('../config/Enum');
 const { NotFoundError, ValidationError } = require('../lib/Error');
-const { authenticate } = require('../lib/auth');
+const { authenticate, optionalAuthenticate } = require('../lib/auth');
 const { requireAdmin, requireAdminOrProductManager } = require('../lib/middleware');
 
 /**
@@ -449,12 +452,147 @@ router.post('/:id/stock/decrease', authenticate, requireAdminOrProductManager, a
 });
 
 /**
+ * @route   GET /products/:id/reviews
+ * @desc    Fetch approved, visible reviews for a product
+ */
+router.get('/:id/reviews', async function(req, res, next) {
+    try {
+        // Ensure product exists to avoid leaking data
+        const productExists = await Product.exists({ _id: req.params.id });
+
+        if (!productExists) {
+            throw new NotFoundError('Product not found');
+        }
+
+        const [visibleReviews, ratingDocuments] = await Promise.all([
+            Review.find({
+                product_id: req.params.id,
+                status: Enum.REVIEW_STATUS.APPROVED,
+                is_visible: true
+            })
+            .populate('customer_id', 'first_name last_name role')
+            .sort({ createdAt: -1 }),
+            Review.find({
+                product_id: req.params.id,
+                rating: { $gte: 1 }
+            }).select('rating')
+        ]);
+
+        const reviewCount = ratingDocuments.length;
+        const averageRating = reviewCount
+            ? Number((ratingDocuments.reduce((sum, review) => sum + (review.rating || 0), 0) / reviewCount).toFixed(1))
+            : 0;
+
+        res.json({
+            success: true,
+            data: {
+                reviews: visibleReviews,
+                reviewCount,
+                averageRating
+            }
+        });
+    } catch (error) {
+        if (error.name === 'CastError') {
+            next(new NotFoundError('Invalid product ID'));
+        } else {
+            next(error);
+        }
+    }
+});
+
+/**
+ * @route   POST /products/:id/reviews
+ * @desc    Submit or update a review for a product
+ */
+router.post('/:id/reviews', authenticate, async function(req, res, next) {
+    try {
+        const { rating, comment } = req.body;
+        const parsedRating = Number(rating);
+        const trimmedComment = (comment || '').trim();
+
+        if (!parsedRating || parsedRating < 1 || parsedRating > 5) {
+            throw new ValidationError('Rating must be between 1 and 5 stars');
+        }
+
+        if (!trimmedComment) {
+            throw new ValidationError('Comment is required');
+        }
+
+        const product = await Product.findById(req.params.id);
+
+        if (!product) {
+            throw new NotFoundError('Product not found');
+        }
+
+        let relatedOrder = null;
+
+        if (req.user.role === Enum.USER_ROLES.CUSTOMER) {
+            relatedOrder = await Order.findOne({
+                customer_id: req.user._id,
+                payment_status: Enum.PAYMENT_STATUS.COMPLETED,
+                'items.product_id': req.params.id
+            }).sort({ createdAt: -1 });
+
+            if (!relatedOrder) {
+                throw new ValidationError('You must purchase this product before leaving a review.');
+            }
+        } else {
+            relatedOrder = await Order.findOne({
+                customer_id: req.user._id,
+                'items.product_id': req.params.id
+            }).sort({ createdAt: -1 }) || null;
+        }
+
+        let review = await Review.findOne({
+            product_id: req.params.id,
+            customer_id: req.user._id
+        });
+
+        if (review) {
+            review.rating = parsedRating;
+            review.comment = trimmedComment;
+            review.order_id = relatedOrder ? relatedOrder._id : review.order_id;
+            review.status = Enum.REVIEW_STATUS.PENDING;
+            review.is_visible = false;
+            review.updated_by = req.user._id;
+            await review.save();
+        } else {
+            review = await Review.create({
+                product_id: req.params.id,
+                customer_id: req.user._id,
+                order_id: relatedOrder ? relatedOrder._id : undefined,
+                rating: parsedRating,
+                comment: trimmedComment,
+                status: Enum.REVIEW_STATUS.PENDING,
+                is_visible: false,
+                created_by: req.user._id,
+                updated_by: req.user._id
+            });
+        }
+
+        res.status(201).json({
+            success: true,
+            message: 'Review submitted and awaiting approval',
+            data: review
+        });
+    } catch (error) {
+        if (error.code === 11000) {
+            next(new ValidationError('You have already submitted a review for this product.'));
+        } else if (error.name === 'CastError') {
+            next(new NotFoundError('Invalid product ID'));
+        } else {
+            next(error);
+        }
+    }
+});
+
+/**
  * @route   GET /products/:id/purchased
  * @desc    Check if the current user has purchased this product
  */
-router.get('/:id/purchased', async function(req, res, next) {
+router.get('/:id/purchased', optionalAuthenticate, async function(req, res, next) {
     try {
-        const userId = req.user?.id; // Will be set by auth middleware
+        const userId = req.user?._id;
         
         if (!userId) {
             // Guest users haven't purchased anything
@@ -465,9 +603,6 @@ router.get('/:id/purchased', async function(req, res, next) {
                 }
             });
         }
-        
-        const Order = require('../db/models/Order');
-        const Enum = require('../config/Enum');
         
         // Check if user has any completed order containing this product
         const orders = await Order.find({
