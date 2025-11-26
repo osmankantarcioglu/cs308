@@ -39,7 +39,7 @@ export default function Footer() {
           <div>
             <h3 className="text-white font-semibold mb-4">Quick Links</h3>
             <ul className="space-y-2">
-              <li><a href="#" className="hover:text-white transition-colors">About Us</a></li>
+              <li><a href="/about" className="hover:text-white transition-colors">About Us</a></li>
               <li><a href="#" className="hover:text-white transition-colors">Contact</a></li>
               <li><a href="#" className="hover:text-white transition-colors">Careers</a></li>
               <li><a href="#" className="hover:text-white transition-colors">Blog</a></li>
@@ -53,7 +53,7 @@ export default function Footer() {
               <li><a href="#" className="hover:text-white transition-colors">Shipping Info</a></li>
               <li><a href="#" className="hover:text-white transition-colors">Returns</a></li>
               <li><a href="#" className="hover:text-white transition-colors">Warranty</a></li>
-              <li><a href="#" className="hover:text-white transition-colors">FAQ</a></li>
+              <li><a href="/about#faq" className="hover:text-white transition-colors">FAQ</a></li>
             </ul>
           </div>
 
@@ -83,9 +83,9 @@ export default function Footer() {
               © 2025 TechHub. All rights reserved.
             </p>
             <div className="flex space-x-6 text-sm">
-              <a href="#" className="hover:text-white transition-colors">Privacy Policy</a>
-              <a href="#" className="hover:text-white transition-colors">Terms of Service</a>
-              <a href="#" className="hover:text-white transition-colors">Cookie Policy</a>
+              <a href="/privacy" className="hover:text-white transition-colors">Privacy Policy</a>
+              <a href="/terms" className="hover:text-white transition-colors">Terms of Service</a>
+              <a href="/cookies" className="hover:text-white transition-colors">Cookie Policy</a>
             </div>
           </div>
         </div>

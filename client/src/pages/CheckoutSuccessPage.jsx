@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
+import { downloadInvoicePdf } from "../lib/invoicePdf";
+
 
 const API_BASE_URL = "http://localhost:3000/orders";
 
@@ -43,22 +45,137 @@ export default function CheckoutSuccessPage() {
         const data = await response.json();
         
         if (data.success) {
-          setOrder(data.data);
-          // Refresh cart to show it's empty
+          const baseOrder = data.data; 
+  
+          let finalOrder = baseOrder;
+          try {
+            const detailsResp = await fetch(
+              `${API_BASE_URL}/${baseOrder._id}`,
+              {
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  "Content-Type": "application/json",
+                },
+              }
+            );
+  
+            if (detailsResp.ok) {
+              const detailsData = await detailsResp.json();
+              if (detailsData.success && detailsData.data) {
+                finalOrder = detailsData.data;
+              }
+            }
+          } catch (e) {
+            console.error("Failed to fetch full order details", e);
+          }
+  
+          console.log(
+            "ORDER USED FOR INVOICE ===>",
+            JSON.stringify(finalOrder, null, 2)
+          );
+  
+          setOrder(finalOrder);
           await fetchCart();
         } else {
-          throw new Error('Failed to create order');
+          throw new Error("Failed to create order");
         }
       } catch (err) {
-        console.error('Error completing order:', err);
+        console.error("Error completing order:", err);
         setError(err.message);
       } finally {
         setLoading(false);
       }
     };
-    
+  
     completeOrder();
   }, [searchParams, token, fetchCart]);
+
+  function handleDownloadInvoice() {
+    if (!order) return;
+    console.log("ORDER USED FOR INVOICE ===>", order);
+  
+    const subtotal = order.subtotal || 0;
+    const totalTaxAmount = order.tax_amount || 0;
+    const totalDiscountAmount = order.discount_amount || 0;
+  
+    const taxRate =
+      subtotal > 0 ? (totalTaxAmount / subtotal) * 100 : 0;
+    const discountRate =
+      subtotal > 0 ? (totalDiscountAmount / subtotal) * 100 : 0;
+  
+    const taxRateRounded = Math.round(taxRate * 100) / 100;
+    const discountRateRounded = Math.round(discountRate * 100) / 100;
+  
+    // ---- 2) ITEMS ----
+    const rawItems = order.items || [];
+  
+    const items = rawItems.map((it) => {
+      const product = it.product_id || {};
+  
+      return {
+        name: product.name || it.name || "Item",
+        quantity: it.quantity || 1,
+        price: it.price_at_time ?? product.price ?? 0,
+        tax: taxRateRounded,        
+        discount: discountRateRounded, 
+      };
+    });
+  
+    // ---- 3) CUSTOMER ----
+    const customer = order.customer_id || {};
+    const customerName =
+      [customer.first_name, customer.last_name].filter(Boolean).join(" ") ||
+      "Customer";
+  
+    const customerEmail = customer.email || "";
+    const customerAddress = order.delivery_address || "";
+  
+    // ---- 4) INVOICE PAYLOAD ----
+    const payload = {
+      company: {
+        name: "TechHub Store",
+        address: "Orta Mah. Kampus Cd. Sabanci Universitesi\nTuzla / Istanbul",
+        phone: "+90 (216) 123 45 67",
+        email: "support@cs308-techhub.com",
+        website: "cs308-techhub.com",
+        taxId: "Tax ID: 1234567890",
+        bank: "IBAN: TR12 3456 7890 1234 5678 9012 34",
+      },
+      customer: {
+        name: customerName,
+        company: "",
+        address: customerAddress,
+        phone: "",
+        email: customerEmail,
+        taxId: "",
+      },
+      invoice: {
+        label: "Invoice",
+        number: order.order_number || order._id || "1",
+        date: order.order_date
+          ? new Date(order.order_date).toLocaleDateString("en-US")
+          : undefined,
+        dueDate: undefined,
+        status: order.payment_status || "completed",
+        locale: "en-US",
+        currency: "USD",
+        orderDiscount: order.discount_amount || 0,
+        fee: order.shipping_cost || 0,
+        taxAmount: order.tax_amount || 0,
+        subtotal: order.subtotal || 0,
+      },
+      items,
+      note:
+        "Thank you for your purchase! This invoice was generated for the CS308 project.",
+      qr: null,
+    };
+  
+    downloadInvoicePdf(
+      payload,
+      `invoice-${order.order_number || order._id || "order"}.pdf`
+    );
+  }
+  
 
   if (loading) {
     return (
@@ -143,6 +260,13 @@ export default function CheckoutSuccessPage() {
           </div>
 
           <div className="flex flex-col sm:flex-row gap-4">
+            <button
+              onClick={handleDownloadInvoice}
+              className="flex-1 px-6 py-3 bg-primary text-white font-semibold rounded-lg hover:bg-primary-dark transition-colors text-center"
+            >
+              Download Invoice PDF
+            </button>
+
             <Link
               to="/profile"
               className="flex-1 px-6 py-3 bg-primary text-white font-semibold rounded-lg hover:bg-primary-dark transition-colors text-center"

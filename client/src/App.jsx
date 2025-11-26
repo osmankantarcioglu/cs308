@@ -26,11 +26,12 @@ import ProductManagerLoginPage from "./pages/ProductManagerLoginPage";
 import ProductManagerDashboard from "./pages/ProductManagerDashboard";
 import SupportAgentLoginPage from "./pages/SupportAgentLoginPage";
 import SupportAgentDashboard from "./pages/SupportAgentDashboard";
+import AboutPage from "./pages/AboutPage";
+import PrivacyPolicyPage from "./pages/PrivacyPolicyPage";
+import TermsOfServicePage from "./pages/TermsOfServicePage";
+import CookiePolicyPage from "./pages/CookiePolicyPage";
 import CustomerChatWidget from "./components/CustomerChatWidget";
-import Dashboard from "./pages/Dashboard";
-import Pricing from "./pages/Pricing";
-import Invoices from "./pages/Invoices";
-import OrderSuccessPage from "./pages/OrderSuccess";
+import CategoriesPage from "./pages/CategoriesPage";
 
 export default function App() {
   return (
@@ -52,17 +53,28 @@ export default function App() {
             }
           />
           <Route path="/products" element={<ProductsPage />} />
+          <Route path="/categories" element={<CategoriesPage />} />
           <Route path="/products/:id" element={<ProductDetailPage />} />
           <Route path="/basket" element={<BasketPage />} />
           <Route path="/wishlist" element={<WishlistPage />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/checkout" element={<CheckoutPage />} />
           <Route path="/checkout/success" element={<CheckoutSuccessPage />} />
+          <Route path="/about" element={<AboutPage />} />
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/admin" element={<AdminPage />} />
-        </Routes>
-        <Footer />
-      </div>
-    </CartProvider>
+          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/admin" element={<AdminLoginPage />} />
+          <Route path="/admin/dashboard" element={<AdminRoute><AdminPage /></AdminRoute>} />
+          <Route path="/product-manager" element={<ProductManagerLoginPage />} />
+          <Route path="/product-manager/dashboard" element={<ProductManagerRoute><ProductManagerDashboard /></ProductManagerRoute>} />
+          <Route path="/support" element={<SupportAgentLoginPage />} />
+          <Route path="/support/dashboard" element={<SupportAgentRoute><SupportAgentDashboard /></SupportAgentRoute>} />
+            </Routes>
+            <CustomerChatWidget />
+            <Footer />
+          </div>
+        </WishlistProvider>
+      </CartProvider>
+    </AuthProvider>
   );
 }

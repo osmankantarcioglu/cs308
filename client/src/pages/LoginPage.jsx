@@ -4,15 +4,16 @@ import { useAuth } from "../context/AuthContext";
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function handleLogin(e) {
-    e.preventDefault()
-    setError("")
-    setLoading(true)
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
 
     try {
       const result = await login(email, password);
@@ -33,11 +34,11 @@ export default function LoginPage() {
         throw new Error(result.error || "Login failed");
       }
     } catch (err) {
-      setError(err.message || "Login failed")
+      setError(err.message);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 py-12 px-4 sm:px-6 lg:px-8">
@@ -152,7 +153,5 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
-  )
+  );
 }
-
-
