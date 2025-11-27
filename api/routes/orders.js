@@ -9,6 +9,8 @@ const { authenticate } = require('../lib/auth');
 const { NotFoundError, ValidationError } = require('../lib/Error');
 const Enum = require('../config/Enum');
 const { requireAdminOrProductManager } = require('../lib/middleware');
+const { sendInvoiceEmail } = require('../lib/invoiceEmail');
+
 
 // Initialize Stripe only if API key is provided
 let stripe = null;
@@ -325,6 +327,12 @@ router.post('/complete-order', authenticate, async function(req, res, next) {
             'POPULATED ORDER ===>',
             JSON.stringify(populatedOrder.toJSON(), null, 2)
         );
+
+        /*try {
+            await sendInvoiceEmail(populatedOrder);
+          } catch (e) {
+            console.error('Error sending invoice email:', e.message);
+        }*/
 
         //const pdfBuffer = await buildInvoicePdf(populatedOrder);
 

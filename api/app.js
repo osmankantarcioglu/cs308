@@ -19,6 +19,9 @@ var deliveriesRouter = require('./routes/deliveries');
 var reviewsRouter = require('./routes/reviews');
 var chatsRouter = require('./routes/chats');
 
+var emailRouter = require('./routes/email');
+
+
 var app = express();
 
 // view engine setup
@@ -51,6 +54,8 @@ app.use('/categories', categoriesRouter); // http://localhost:3000/categories
 app.use('/deliveries', deliveriesRouter); // http://localhost:3000/deliveries
 app.use('/reviews', reviewsRouter); // http://localhost:3000/reviews
 app.use('/chats', chatsRouter); // http://localhost:3000/chats
+app.use('/email', emailRouter);
+
 
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {

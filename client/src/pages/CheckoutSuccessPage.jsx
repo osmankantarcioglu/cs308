@@ -2,7 +2,9 @@ import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
-import { downloadInvoicePdf } from "../lib/invoicePdf";
+//import { downloadInvoicePdf } from "../lib/invoicePdf";
+import { generateInvoicePdf, downloadInvoicePdf } from "../lib/invoicePdf";
+
 
 
 const API_BASE_URL = "http://localhost:3000/orders";
@@ -90,7 +92,7 @@ export default function CheckoutSuccessPage() {
     completeOrder();
   }, [searchParams, token, fetchCart]);
 
-  function handleDownloadInvoice() {
+  async function handleDownloadInvoice() {
     if (!order) return;
     console.log("ORDER USED FOR INVOICE ===>", order);
   
@@ -170,12 +172,44 @@ export default function CheckoutSuccessPage() {
       qr: null,
     };
   
-    downloadInvoicePdf(
+    /*downloadInvoicePdf(
       payload,
       `invoice-${order.order_number || order._id || "order"}.pdf`
-    );
+    );*/
+
+    const filename = `invoice-${order.order_number || order._id || "order"}.pdf`;
+  downloadInvoicePdf(payload, filename);
+
+  try {
+    const doc = generateInvoicePdf(payload);
+
+    // datauristring → "data:application/pdf;base64,...."
+    const dataUri = doc.output("datauristring");
+    const pdfBase64 = dataUri.split(",")[1]; 
+
+    const response = await fetch("http://localhost:3000/email/send-invoice", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`, 
+      },
+      body: JSON.stringify({
+        orderId: order._id,
+        pdfBase64,
+      }),
+    });
+
+    const resData = await response.json();
+    console.log("EMAIL API RESPONSE ===>", resData);
+
+    if (!response.ok) {
+      console.error("Email sending failed:", resData);
+    }
+  } catch (err) {
+    console.error("Error while sending invoice email:", err);
   }
-  
+    }
+
 
   if (loading) {
     return (
