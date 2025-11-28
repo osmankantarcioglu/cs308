@@ -32,13 +32,13 @@ export default function ProductsPage() {
     if (urlCategory !== selectedCategory) {
       setSelectedCategory(urlCategory);
     }
-  }, [searchParams, searchTerm, selectedCategory]);
+  }, [searchParams]);
   
   // Update URL when search term or category changes
   useEffect(() => {
-    const params = {};
-    if (searchTerm) params.q = searchTerm;
-    if (selectedCategory) params.category = selectedCategory;
+    const params = new URLSearchParams();
+    if (searchTerm && searchTerm.trim()) params.set("q", searchTerm.trim());
+    if (selectedCategory) params.set("category", selectedCategory);
     setSearchParams(params, { replace: true });
   }, [searchTerm, selectedCategory, setSearchParams]);
 
@@ -63,14 +63,18 @@ export default function ProductsPage() {
   const fetchProducts = useCallback(async () => {
     try {
       setLoading(true);
+      setError(null);
       
       // Build query parameters
       const params = new URLSearchParams();
-      if (searchTerm) {
-        params.append('search', searchTerm);
+      if (searchTerm && searchTerm.trim()) {
+        params.append('search', searchTerm.trim());
       }
       if (selectedCategory) {
         params.append('category', selectedCategory);
+      }
+      if (sortBy) {
+        params.append('sortBy', sortBy);
       }
       params.append('limit', '100'); // Increase limit to show more products
       
@@ -83,25 +87,15 @@ export default function ProductsPage() {
       const data = await response.json();
       
       if (data.success && data.data && data.data.products) {
-        let filteredProducts = data.data.products;
-        
-        // Apply sorting
-        if (sortBy === "price_asc") {
-          filteredProducts = [...filteredProducts].sort((a, b) => a.price - b.price);
-        } else if (sortBy === "price_desc") {
-          filteredProducts = [...filteredProducts].sort((a, b) => b.price - a.price);
-        } else if (sortBy === "popularity") {
-          // Sort by view_count in descending order (most viewed first)
-          filteredProducts = [...filteredProducts].sort((a, b) => (b.view_count || 0) - (a.view_count || 0));
-        }
-        
-        setProducts(filteredProducts);
+        // Backend handles sorting, so use products directly
+        setProducts(data.data.products);
       } else {
         throw new Error("Invalid response format");
       }
     } catch (err) {
       console.error("Error fetching products:", err);
       setError(err.message);
+      setProducts([]);
     } finally {
       setLoading(false);
     }
@@ -226,7 +220,9 @@ export default function ProductsPage() {
           <div className="md:w-64">
             <select
               value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
+              onChange={(e) => {
+                setSelectedCategory(e.target.value);
+              }}
               className="w-full px-4 py-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent bg-white"
             >
               <option value="">All Categories</option>
@@ -254,18 +250,39 @@ export default function ProductsPage() {
         </div>
 
         {/* Products Count */}
-        {products.length > 0 && (
+        {!loading && (
           <div className="mb-6 text-gray-600">
-            Showing <span className="font-semibold text-gray-900">{products.length}</span> products
+            {products.length > 0 ? (
+              <>Showing <span className="font-semibold text-gray-900">{products.length}</span> product{products.length !== 1 ? 's' : ''}</>
+            ) : (
+              <>No products found{searchTerm || selectedCategory ? ' matching your criteria' : ''}</>
+            )}
           </div>
         )}
 
         {/* Products Grid */}
-        {products.length === 0 ? (
+        {!loading && products.length === 0 ? (
           <div className="text-center py-16">
             <div className="text-gray-400 text-6xl mb-4">📦</div>
             <h3 className="text-2xl font-bold text-gray-900 mb-2">No Products Found</h3>
-            <p className="text-gray-600">There are no products in the database yet.</p>
+            <p className="text-gray-600">
+              {searchTerm || selectedCategory 
+                ? "Try adjusting your search or filter criteria." 
+                : "There are no products in the database yet."}
+            </p>
+            {(searchTerm || selectedCategory) && (
+              <button
+                onClick={() => {
+                  setSearchTerm("");
+                  setSearchInput("");
+                  setSelectedCategory("");
+                  setSortBy("");
+                }}
+                className="mt-4 px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors"
+              >
+                Clear Filters
+              </button>
+            )}
           </div>
         ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">

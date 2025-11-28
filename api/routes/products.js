@@ -12,24 +12,24 @@ const { requireAdmin, requireAdminOrProductManager } = require('../lib/middlewar
 /**
  * @route   GET /products
  * @desc    Get all products with optional filtering
- * @params  query params: category, search, minPrice, maxPrice, page, limit
+ * @params  query params: category, search, minPrice, maxPrice, page, limit, sortBy
  */
 router.get('/', async function(req, res, next) {
     try {
-        const { category, search, minPrice, maxPrice, page = 1, limit = 10 } = req.query;
+        const { category, search, minPrice, maxPrice, page = 1, limit = 10, sortBy } = req.query;
         const Category = require('../db/models/Category');
         
         // Get active category IDs first (more efficient)
         const activeCategories = await Category.find({ is_active: true }).select('_id');
         const activeCategoryIds = activeCategories.map(cat => cat._id);
         
-        // Build query
-        let query = {};
+        // Build query - use $and to properly combine all conditions
+        const queryConditions = [];
         
         // Only show active products
-        query.is_active = true;
+        queryConditions.push({ is_active: true });
         
-        // Filter by category (only if category is provided)
+        // Filter by category
         if (category) {
             // Verify requested category is active
             if (!activeCategoryIds.some(id => id.toString() === category)) {
@@ -47,55 +47,67 @@ router.get('/', async function(req, res, next) {
                     }
                 });
             }
-            query.category = category;
+            queryConditions.push({ category: category });
         } else {
             // If no category filter, only show products with active categories (or no category)
-            query.$or = [
-                { category: { $in: activeCategoryIds } },
-                { category: null }
-            ];
+            queryConditions.push({
+                $or: [
+                    { category: { $in: activeCategoryIds } },
+                    { category: null }
+                ]
+            });
         }
         
         // Search by name or description
-        if (search) {
-            const searchCondition = {
+        if (search && search.trim()) {
+            queryConditions.push({
                 $or: [
-                    { name: { $regex: search, $options: 'i' } },
-                    { description: { $regex: search, $options: 'i' } }
+                    { name: { $regex: search.trim(), $options: 'i' } },
+                    { description: { $regex: search.trim(), $options: 'i' } }
                 ]
-            };
-            // If we already have $or for category, use $and to combine
-            if (query.$or) {
-                query = {
-                    ...query,
-                    $and: [
-                        { $or: query.$or },
-                        searchCondition
-                    ]
-                };
-                delete query.$or;
-            } else {
-                query.$or = searchCondition.$or;
-            }
+            });
         }
         
         // Filter by price range
         if (minPrice || maxPrice) {
-            query.price = {};
-            if (minPrice) query.price.$gte = parseFloat(minPrice);
-            if (maxPrice) query.price.$lte = parseFloat(maxPrice);
+            const priceCondition = {};
+            if (minPrice) priceCondition.$gte = parseFloat(minPrice);
+            if (maxPrice) priceCondition.$lte = parseFloat(maxPrice);
+            queryConditions.push({ price: priceCondition });
+        }
+        
+        // Combine all conditions with $and
+        const query = queryConditions.length > 1 ? { $and: queryConditions } : queryConditions[0] || {};
+        
+        // Build sort object
+        let sortObject = { popularity_score: -1, createdAt: -1 }; // Default sort
+        if (sortBy) {
+            switch (sortBy) {
+                case 'price_asc':
+                    sortObject = { price: 1, createdAt: -1 };
+                    break;
+                case 'price_desc':
+                    sortObject = { price: -1, createdAt: -1 };
+                    break;
+                case 'popularity':
+                    sortObject = { popularity_score: -1, view_count: -1, createdAt: -1 };
+                    break;
+                default:
+                    // Keep default sort
+                    break;
+            }
         }
         
         // Apply pagination
         const skip = (parseInt(page) - 1) * parseInt(limit);
         
-        // Find products with active categories
+        // Find products
         const products = await Product.find(query)
             .populate('category', 'name')
             .populate('created_by', 'username email')
+            .sort(sortObject)
             .skip(skip)
-            .limit(parseInt(limit))
-            .sort({ popularity_score: -1, createdAt: -1 });
+            .limit(parseInt(limit));
         
         // Get total count
         const total = await Product.countDocuments(query);
