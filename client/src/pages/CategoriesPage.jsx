@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 const CATEGORIES_API_URL = "http://localhost:3000/categories";
 const PRODUCTS_API_URL = "http://localhost:3000/products";
 
 export default function CategoriesPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [categories, setCategories] = useState([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState("");
   const [items, setItems] = useState([]);
@@ -35,9 +36,6 @@ export default function CategoriesPage() {
 
         if (data.success && data.data?.categories) {
           setCategories(data.data.categories);
-          if (data.data.categories.length > 0) {
-            setSelectedCategoryId(data.data.categories[0]._id);
-          }
         } else {
           throw new Error("Received an unexpected response from the server.");
         }
@@ -50,6 +48,25 @@ export default function CategoriesPage() {
 
     fetchCategories();
   }, []);
+
+  const categoryParam = searchParams.get("category");
+
+  useEffect(() => {
+    if (!categories.length) {
+      setSelectedCategoryId("");
+      return;
+    }
+
+    const fallbackCategoryId = categories[0]._id;
+    const matchedCategory = categories.find((category) => category._id === categoryParam);
+    const nextCategoryId = matchedCategory ? matchedCategory._id : fallbackCategoryId;
+
+    setSelectedCategoryId(nextCategoryId);
+
+    if (categoryParam !== nextCategoryId && nextCategoryId) {
+      setSearchParams({ category: nextCategoryId }, { replace: true });
+    }
+  }, [categories, categoryParam, setSearchParams]);
 
   useEffect(() => {
     if (!selectedCategoryId) {
@@ -100,8 +117,9 @@ export default function CategoriesPage() {
   }, [selectedCategoryId]);
 
   const handleCategorySelect = (categoryId) => {
-    if (categoryId === selectedCategoryId) return;
+    if (!categoryId || categoryId === selectedCategoryId) return;
     setSelectedCategoryId(categoryId);
+    setSearchParams({ category: categoryId }, { replace: true });
   };
 
   const handleViewProduct = (productId) => {

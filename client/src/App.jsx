@@ -46,8 +46,8 @@ export default function App() {
             element={
               <main>
                 <HeroSection />
-                <Categories />
                 <FeaturedProducts />
+                <Categories />
                 <DealsSection />
               </main>
             }
