@@ -27,25 +27,21 @@ const createSessionId = () => {
 };
 
 export default function CustomerChatWidget() {
-  const { user, token } = useAuth();
-  const storedUser = useMemo(() => {
-    try {
-      const cached = localStorage.getItem("user");
-      return cached ? JSON.parse(cached) : null;
-    } catch {
+  const { user, token, isAuthenticated } = useAuth();
+
+  // Show widget only for:
+  // 1. Guests (not authenticated)
+  // 2. Customers (authenticated with role "customer")
+  // Hide for: admin, product_manager, sales_manager, support_agent
+  
+  // If user is authenticated, check their role
+  if (isAuthenticated && user) {
+    // Only show for customers
+    if (user.role !== "customer") {
       return null;
     }
-  }, []);
-
-  // Show widget for guests (no user) and customers only
-  // Hide for admins and support agents
-  const effectiveRole = user?.role ?? storedUser?.role ?? null;
-  const allowedToShow = !effectiveRole || effectiveRole === "customer";
-
-  // Always show for guests and customers
-  if (!allowedToShow) {
-    return null;
   }
+  // If not authenticated, show for guests (user is null/undefined)
 
   return <CustomerChatWidgetBody user={user} token={token} />;
 }
@@ -112,7 +108,7 @@ function CustomerChatWidgetBody({ user, token }) {
     return !!binding && (!user || (owner && owner.startsWith("guest")));
   };
 
-  const fetchMessages = async (currentChatId) => {
+  const fetchMessages = async (currentChatId, isInitialLoad = false) => {
     if (!currentChatId) return;
     try {
       // Only send session_id for guest users, not for authenticated users
@@ -123,29 +119,64 @@ function CustomerChatWidgetBody({ user, token }) {
         headers,
         cache: "no-store",
       });
-      if (res.status === 403 || res.status === 404) {
-        // Don't clear chat state on 403/404 - just log the error
-        // The chat might be valid but the user doesn't have access yet
-        console.warn("Chat access denied or not found");
+      
+      // Handle 403 errors - might be authorization issue, try to get error details
+      if (res.status === 403) {
+        try {
+          const errorData = await res.json();
+          console.warn("Chat access denied:", errorData.error || "Unknown error");
+        } catch (e) {
+          console.warn("Chat access denied (403)");
+        }
+        // Don't return - let it retry on next poll
+        // The issue might be temporary (token refresh, etc.)
         return;
       }
-      if (!res.ok) return;
+      
+      if (res.status === 404) {
+        console.warn("Chat not found (404)");
+        return;
+      }
+      
+      if (!res.ok) {
+        console.warn(`Failed to fetch messages: ${res.status}`);
+        return;
+      }
       const data = await res.json();
       const fetchedMessages = data.data?.messages || [];
-      console.log(`Fetched ${fetchedMessages.length} messages for chat ${currentChatId}`);
-      setMessages(fetchedMessages);
       
-      // Auto-scroll to bottom after messages are loaded
-      setTimeout(() => {
-        scrollToBottom();
-      }, 100);
+      // Check if we have new messages by comparing IDs
+      setMessages(prevMessages => {
+        const newMessages = fetchedMessages;
+        const hasNewMessages = newMessages.length > prevMessages.length || 
+          (newMessages.length > 0 && prevMessages.length > 0 && 
+           newMessages[newMessages.length - 1]._id !== prevMessages[prevMessages.length - 1]._id);
+        
+        // Only auto-scroll on initial load or if new messages were added and user is near bottom
+        if (isInitialLoad || hasNewMessages) {
+          setTimeout(() => {
+            scrollToBottom(isInitialLoad);
+          }, 100);
+        }
+        
+        return newMessages;
+      });
     } catch (err) {
       console.warn("Chat fetch failed", err.message);
     }
   };
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  const scrollToBottom = (force = false) => {
+    if (!messagesContainerRef.current) return;
+    
+    const container = messagesContainerRef.current;
+    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+    
+    // Only scroll if user is near bottom or if forced (e.g., initial load or user sent a message)
+    if (force || isNearBottom) {
+      // Scroll the container itself, not the entire page
+      container.scrollTop = container.scrollHeight;
+    }
   };
 
   useEffect(() => {
@@ -252,28 +283,21 @@ function CustomerChatWidgetBody({ user, token }) {
   }, [isOpen, user?._id, token, chatId]);
 
   useEffect(() => {
-    if (!chatId) return;
+    if (!chatId || !isOpen) return; // Only poll when chat is open
     
-    // Initial fetch
-    fetchMessages(chatId);
+    // Initial fetch (marked as initial load)
+    fetchMessages(chatId, true);
     
-    // Set up polling interval
+    // Set up polling interval (not initial load, so won't force scroll)
     const interval = setInterval(() => {
-      if (chatId) {
-        fetchMessages(chatId);
+      if (chatId && isOpen) {
+        fetchMessages(chatId, false);
       }
     }, 7000);
     
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chatId]);
-
-  // Auto-scroll when messages change
-  useEffect(() => {
-    if (messages.length > 0) {
-      scrollToBottom();
-    }
-  }, [messages]);
+  }, [chatId, isOpen]);
 
   const handleSendMessage = async () => {
     if (!message && attachments.length === 0) return;
@@ -352,15 +376,15 @@ function CustomerChatWidgetBody({ user, token }) {
         
         // Immediately fetch all messages to ensure we have the full chat history
         setTimeout(async () => {
-          await fetchMessages(newChatId);
+          await fetchMessages(newChatId, false);
         }, 300);
         
         // Reset fetch flag when new chat is created
         hasFetchedInitialChat.current = true;
         
-        // Scroll to bottom
+        // Force scroll to bottom after sending (user wants to see their message)
         setTimeout(() => {
-          scrollToBottom();
+          scrollToBottom(true);
         }, 200);
       } else {
         const payload = {
@@ -398,12 +422,12 @@ function CustomerChatWidgetBody({ user, token }) {
 
         // Wait a bit for the database to be fully updated, then refresh all messages
         setTimeout(async () => {
-          await fetchMessages(chatId);
+          await fetchMessages(chatId, false);
         }, 300);
         
-        // Ensure scroll to bottom after sending
+        // Force scroll to bottom after sending (user wants to see their message)
         setTimeout(() => {
-          scrollToBottom();
+          scrollToBottom(true);
         }, 200);
       }
     } catch (err) {

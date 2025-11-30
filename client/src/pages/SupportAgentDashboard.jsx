@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 
 const API_ORIGIN = "http://localhost:3000";
@@ -22,15 +22,20 @@ const fileToAttachment = (file) =>
 export default function SupportAgentDashboard() {
   const { user, token, logout } = useAuth();
   const [queue, setQueue] = useState([]);
+  const [claimedChats, setClaimedChats] = useState([]);
   const [selectedChat, setSelectedChat] = useState(null);
   const [messages, setMessages] = useState([]);
   const [context, setContext] = useState(null);
   const [reply, setReply] = useState("");
   const [attachments, setAttachments] = useState([]);
   const [loadingQueue, setLoadingQueue] = useState(true);
+  const [loadingClaimed, setLoadingClaimed] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+  const [activeTab, setActiveTab] = useState("queue"); // "queue" or "claimed"
+  const messagesEndRef = useRef(null);
+  const messagesContainerRef = useRef(null);
 
   const authorizedHeaders = useMemo(
     () => ({
@@ -47,6 +52,7 @@ export default function SupportAgentDashboard() {
     try {
       const res = await fetch(`${CHAT_API_BASE}/queue`, {
         headers: authorizedHeaders,
+        cache: "no-store",
       });
       if (!res.ok) {
         const data = await res.json();
@@ -61,26 +67,104 @@ export default function SupportAgentDashboard() {
     }
   }, [authorizedHeaders, token]);
 
+  const fetchClaimedChats = useCallback(async () => {
+    if (!token) return;
+    setLoadingClaimed(true);
+    try {
+      const res = await fetch(`${CHAT_API_BASE}/claimed`, {
+        headers: authorizedHeaders,
+        cache: "no-store",
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to load claimed chats");
+      }
+      const data = await res.json();
+      setClaimedChats(data.data || []);
+    } catch (err) {
+      console.error("Failed to load claimed chats:", err.message);
+    } finally {
+      setLoadingClaimed(false);
+    }
+  }, [authorizedHeaders, token]);
+
+  // Poll queue and claimed chats every 7 seconds (same as customer chat)
   useEffect(() => {
     fetchQueue();
-    const interval = setInterval(fetchQueue, 15000);
+    fetchClaimedChats();
+    const interval = setInterval(() => {
+      fetchQueue();
+      fetchClaimedChats();
+    }, 7000);
     return () => clearInterval(interval);
-  }, [fetchQueue]);
+  }, [fetchQueue, fetchClaimedChats]);
 
-  const loadChat = async (chatId) => {
-    if (!chatId) return;
-    setLoadingMessages(true);
+  const scrollToBottom = useCallback((force = false) => {
+    if (!messagesContainerRef.current) return;
+    
+    const container = messagesContainerRef.current;
+    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+    
+    // Only scroll if user is near bottom or if forced (e.g., after sending a message)
+    if (force || isNearBottom) {
+      // Scroll the container itself, not the entire page
+      container.scrollTop = container.scrollHeight;
+    }
+  }, []);
+
+  const fetchMessages = useCallback(async (chatId, isInitialLoad = false) => {
+    if (!chatId || !token) return; // Don't make request if no token
     try {
       const res = await fetch(`${CHAT_API_BASE}/${chatId}/messages`, {
         headers: authorizedHeaders,
+        cache: "no-store",
       });
       if (!res.ok) {
+        // For 403 errors, log and try to understand the issue
+        if (res.status === 403) {
+          const errorData = await res.json().catch(() => ({}));
+          console.warn("403 Forbidden when fetching messages:", errorData.error || "Unknown error");
+          // Don't throw - just return silently to avoid breaking the UI
+          return;
+        }
+        if (res.status === 404) {
+          return;
+        }
         const data = await res.json();
         throw new Error(data.error || "Failed to load chat");
       }
       const data = await res.json();
       setSelectedChat(data.data.chat);
-      setMessages(data.data.messages);
+      
+      // Check if we have new messages by comparing IDs
+      setMessages(prevMessages => {
+        const newMessages = data.data.messages || [];
+        const hasNewMessages = newMessages.length > prevMessages.length || 
+          (newMessages.length > 0 && prevMessages.length > 0 && 
+           newMessages[newMessages.length - 1]._id !== prevMessages[prevMessages.length - 1]._id);
+        
+        // Only auto-scroll on initial load or if new messages were added
+        if (isInitialLoad || hasNewMessages) {
+          setTimeout(() => {
+            scrollToBottom(isInitialLoad);
+          }, 100);
+        }
+        
+        return newMessages;
+      });
+    } catch (err) {
+      // Only set error for non-403/404 errors
+      if (err.message && !err.message.includes("403") && !err.message.includes("404")) {
+        console.warn("Chat fetch failed", err.message);
+      }
+    }
+  }, [authorizedHeaders, scrollToBottom]);
+
+  const loadChat = async (chatId) => {
+    if (!chatId) return;
+    setLoadingMessages(true);
+    try {
+      await fetchMessages(chatId, true); // Mark as initial load
       await fetchContext(chatId);
     } catch (err) {
       setError(err.message);
@@ -88,6 +172,30 @@ export default function SupportAgentDashboard() {
       setLoadingMessages(false);
     }
   };
+
+  // Switch to claimed tab when a claimed chat is selected
+  useEffect(() => {
+    if (selectedChat?.claimed_by?.toString() === user?._id) {
+      setActiveTab("claimed");
+    }
+  }, [selectedChat, user?._id]);
+
+  // Poll messages for selected chat every 7 seconds (same as customer chat)
+  useEffect(() => {
+    if (!selectedChat?._id) return;
+    
+    // Initial fetch (marked as initial load)
+    fetchMessages(selectedChat._id, true);
+    
+    // Set up polling interval (not initial load, so won't force scroll)
+    const interval = setInterval(() => {
+      if (selectedChat._id) {
+        fetchMessages(selectedChat._id, false);
+      }
+    }, 7000);
+    
+    return () => clearInterval(interval);
+  }, [selectedChat?._id, fetchMessages]);
 
   const fetchContext = async (chatId) => {
     try {
@@ -107,14 +215,22 @@ export default function SupportAgentDashboard() {
 
   const handleClaim = async (chatId) => {
     try {
-      await fetch(`${CHAT_API_BASE}/${chatId}/claim`, {
+      const res = await fetch(`${CHAT_API_BASE}/${chatId}/claim`, {
         method: "POST",
         headers: authorizedHeaders,
       });
-      fetchQueue();
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to claim chat");
+      }
+      // Refresh both queue and claimed chats
+      await Promise.all([fetchQueue(), fetchClaimedChats()]);
+      // Load the claimed chat
       loadChat(chatId);
+      // Switch to claimed tab to show the claimed chat
+      setActiveTab("claimed");
     } catch (err) {
-      setError("Failed to claim chat");
+      setError(err.message || "Failed to claim chat");
     }
   };
 
@@ -122,6 +238,7 @@ export default function SupportAgentDashboard() {
     if (!reply && attachments.length === 0) return;
     if (!selectedChat) return;
     setSending(true);
+    setError("");
     try {
       const preparedAttachments = await Promise.all(
         attachments.map((file) => fileToAttachment(file))
@@ -139,9 +256,24 @@ export default function SupportAgentDashboard() {
         const data = await res.json();
         throw new Error(data.error || "Failed to send message");
       }
+      
+      const responseData = await res.json();
+      const newMessage = responseData.data;
+
+      // Clear input immediately for better UX
       setReply("");
       setAttachments([]);
-      loadChat(selectedChat._id);
+
+      // Don't add message optimistically to avoid triggering scroll
+      // Just refresh messages without forcing scroll
+      
+      // Wait a bit for the database to be fully updated, then refresh all messages and claimed chats
+      setTimeout(async () => {
+        // Refresh messages but don't force scroll
+        await fetchMessages(selectedChat._id, false);
+        // Refresh claimed chats to update last message preview (chat may have been auto-claimed)
+        await fetchClaimedChats();
+      }, 300);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -238,72 +370,159 @@ export default function SupportAgentDashboard() {
 
         <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
           <section className="xl:col-span-4 bg-slate-900/80 rounded-3xl p-5 ring-1 ring-white/5 space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-semibold">Active Queue</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold">Chats</h2>
               <button
-                onClick={fetchQueue}
+                onClick={() => {
+                  fetchQueue();
+                  fetchClaimedChats();
+                }}
                 className="text-sm text-indigo-300 hover:text-indigo-200"
               >
                 Refresh
               </button>
             </div>
-            {loadingQueue ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="animate-spin rounded-full h-10 w-10 border-t-4 border-b-4 border-indigo-500"></div>
-              </div>
-            ) : queue.length === 0 ? (
-              <p className="text-slate-500 text-sm">No waiting chats 🎉</p>
-            ) : (
-              <div className="space-y-3">
-                {queue.map((chat) => (
-                  <div
-                    key={chat._id}
-                    className={`p-4 rounded-2xl border border-white/5 hover:border-indigo-500/40 transition cursor-pointer ${
-                      selectedChat?._id === chat._id ? "bg-slate-900" : "bg-slate-900/60"
-                    }`}
-                    onClick={() => loadChat(chat._id)}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-semibold">
-                          {chat.customer_name || chat.user_id?.first_name || "Guest"}
-                        </p>
-                        <p className="text-xs text-slate-400">
-                          {chat.customer_email || chat.user_id?.email || "Guest session"}
-                        </p>
-                      </div>
-                      {chat.status === "active" && (
-                        <span className="px-2 py-1 text-xs rounded-full bg-amber-500/20 text-amber-200">
-                          Waiting
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-sm text-slate-300 mt-2 line-clamp-2">
-                      {chat.last_message_preview || "No messages yet"}
-                    </p>
-                    <div className="mt-3 flex gap-2">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleClaim(chat._id);
-                        }}
-                        className="px-3 py-1.5 rounded-xl bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-500"
-                      >
-                        Claim Chat
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          loadChat(chat._id);
-                        }}
-                        className="px-3 py-1.5 rounded-xl bg-slate-800 text-white text-xs font-semibold hover:bg-slate-700"
-                      >
-                        View
-                      </button>
-                    </div>
+            
+            {/* Tabs */}
+            <div className="flex gap-2 border-b border-white/10 pb-2">
+              <button
+                onClick={() => setActiveTab("queue")}
+                className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${
+                  activeTab === "queue"
+                    ? "bg-indigo-600 text-white"
+                    : "text-slate-400 hover:text-white"
+                }`}
+              >
+                Queue ({queue.length})
+              </button>
+              <button
+                onClick={() => setActiveTab("claimed")}
+                className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${
+                  activeTab === "claimed"
+                    ? "bg-indigo-600 text-white"
+                    : "text-slate-400 hover:text-white"
+                }`}
+              >
+                My Chats ({claimedChats.length})
+              </button>
+            </div>
+
+            {/* Queue Tab */}
+            {activeTab === "queue" && (
+              <>
+                {loadingQueue ? (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="animate-spin rounded-full h-10 w-10 border-t-4 border-b-4 border-indigo-500"></div>
                   </div>
-                ))}
-              </div>
+                ) : queue.length === 0 ? (
+                  <p className="text-slate-500 text-sm text-center py-8">No waiting chats 🎉</p>
+                ) : (
+                  <div className="space-y-3 max-h-[600px] overflow-y-auto">
+                    {queue.map((chat) => (
+                      <div
+                        key={chat._id}
+                        className={`p-4 rounded-2xl border border-white/5 hover:border-indigo-500/40 transition cursor-pointer ${
+                          selectedChat?._id === chat._id ? "bg-slate-900" : "bg-slate-900/60"
+                        }`}
+                        onClick={() => loadChat(chat._id)}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="font-semibold">
+                              {chat.customer_name || chat.user_id?.first_name || "Guest"}
+                            </p>
+                            <p className="text-xs text-slate-400">
+                              {chat.customer_email || chat.user_id?.email || "Guest session"}
+                            </p>
+                          </div>
+                          {chat.status === "active" && (
+                            <span className="px-2 py-1 text-xs rounded-full bg-amber-500/20 text-amber-200">
+                              Waiting
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm text-slate-300 mt-2 line-clamp-2">
+                          {chat.last_message_preview || "No messages yet"}
+                        </p>
+                        <div className="mt-3 flex gap-2">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleClaim(chat._id);
+                            }}
+                            className="px-3 py-1.5 rounded-xl bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-500"
+                          >
+                            Claim Chat
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              loadChat(chat._id);
+                            }}
+                            className="px-3 py-1.5 rounded-xl bg-slate-800 text-white text-xs font-semibold hover:bg-slate-700"
+                          >
+                            View
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Claimed Chats Tab */}
+            {activeTab === "claimed" && (
+              <>
+                {loadingClaimed ? (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="animate-spin rounded-full h-10 w-10 border-t-4 border-b-4 border-indigo-500"></div>
+                  </div>
+                ) : claimedChats.length === 0 ? (
+                  <p className="text-slate-500 text-sm text-center py-8">No claimed chats yet. Claim a chat from the queue to start.</p>
+                ) : (
+                  <div className="space-y-3 max-h-[600px] overflow-y-auto">
+                    {claimedChats.map((chat) => (
+                      <div
+                        key={chat._id}
+                        className={`p-4 rounded-2xl border border-white/5 hover:border-indigo-500/40 transition cursor-pointer ${
+                          selectedChat?._id === chat._id ? "bg-slate-900 border-indigo-500/40" : "bg-slate-900/60"
+                        }`}
+                        onClick={() => loadChat(chat._id)}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="font-semibold">
+                              {chat.customer_name || chat.user_id?.first_name || "Guest"}
+                            </p>
+                            <p className="text-xs text-slate-400">
+                              {chat.customer_email || chat.user_id?.email || "Guest session"}
+                            </p>
+                          </div>
+                          <span className="px-2 py-1 text-xs rounded-full bg-emerald-500/20 text-emerald-200">
+                            Claimed
+                          </span>
+                        </div>
+                        <p className="text-sm text-slate-300 mt-2 line-clamp-2">
+                          {chat.last_message_preview || "No messages yet"}
+                        </p>
+                        <p className="text-xs text-slate-500 mt-2">
+                          Claimed {chat.claimed_at ? new Date(chat.claimed_at).toLocaleString() : "recently"}
+                        </p>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            loadChat(chat._id);
+                          }}
+                          className="mt-3 w-full px-3 py-1.5 rounded-xl bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-500"
+                        >
+                          Open Chat
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
             )}
           </section>
 
@@ -314,16 +533,25 @@ export default function SupportAgentDashboard() {
                 <p className="text-sm text-slate-400">
                   {selectedChat
                     ? selectedChat.customer_name || selectedChat.user_id?.first_name || "Guest"
-                    : "Select a chat from the queue"}
+                    : "Select a chat from the queue or claimed chats"}
                 </p>
               </div>
               {selectedChat?.claimed_by && (
-                <span className="text-xs text-lime-300">
-                  Claimed at {new Date(selectedChat.claimed_at).toLocaleTimeString()}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-1 text-xs rounded-full bg-emerald-500/20 text-emerald-200">
+                    Claimed by You
+                  </span>
+                  <span className="text-xs text-slate-400">
+                    {selectedChat.claimed_at ? new Date(selectedChat.claimed_at).toLocaleString() : ""}
+                  </span>
+                </div>
               )}
             </div>
-            <div className="flex-1 bg-slate-950/40 rounded-2xl p-4 overflow-y-auto space-y-4">
+            <div 
+              ref={messagesContainerRef}
+              className="flex-1 bg-slate-950/40 rounded-2xl p-4 overflow-y-auto space-y-4 min-h-0"
+              style={{ maxHeight: '400px' }}
+            >
               {loadingMessages ? (
                 <div className="flex items-center justify-center py-12">
                   <div className="animate-spin rounded-full h-10 w-10 border-t-4 border-b-4 border-indigo-500"></div>
@@ -331,34 +559,37 @@ export default function SupportAgentDashboard() {
               ) : messages.length === 0 ? (
                 <p className="text-slate-500 text-sm text-center">No messages yet.</p>
               ) : (
-                messages.map((msg) => (
-                  <div
-                    key={msg._id}
-                    className={`max-w-md rounded-2xl px-4 py-3 ${
-                      msg.sender_type === "agent"
-                        ? "bg-indigo-600/80 ml-auto text-right"
-                        : "bg-slate-800/80"
-                    }`}
-                  >
-                    {msg.message && <p className="text-sm">{msg.message}</p>}
-                    {msg.attachments?.length > 0 && (
-                      <div className="mt-2 space-y-1 text-xs">
-                        {msg.attachments.map((att, index) => (
-                          <button
-                            key={`${msg._id}-${index}`}
-                            onClick={() => handleDownloadAttachment(att, `attachment-${index + 1}`)}
-                            className="underline text-indigo-200 hover:text-indigo-100 block text-left"
-                          >
-                            {att.filename || `Attachment ${index + 1}`}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    <p className="text-[10px] uppercase tracking-widest mt-2 opacity-60">
-                      {new Date(msg.createdAt).toLocaleTimeString()}
-                    </p>
-                  </div>
-                ))
+                <>
+                  {messages.map((msg) => (
+                    <div
+                      key={msg._id}
+                      className={`max-w-md rounded-2xl px-4 py-3 ${
+                        msg.sender_type === "agent"
+                          ? "bg-indigo-600/80 ml-auto text-right"
+                          : "bg-slate-800/80"
+                      }`}
+                    >
+                      {msg.message && <p className="text-sm">{msg.message}</p>}
+                      {msg.attachments?.length > 0 && (
+                        <div className="mt-2 space-y-1 text-xs">
+                          {msg.attachments.map((att, index) => (
+                            <button
+                              key={`${msg._id}-${index}`}
+                              onClick={() => handleDownloadAttachment(att, `attachment-${index + 1}`)}
+                              className="underline text-indigo-200 hover:text-indigo-100 block text-left"
+                            >
+                              {att.filename || `Attachment ${index + 1}`}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      <p className="text-[10px] uppercase tracking-widest mt-2 opacity-60">
+                        {new Date(msg.createdAt).toLocaleTimeString()}
+                      </p>
+                    </div>
+                  ))}
+                  <div ref={messagesEndRef} />
+                </>
               )}
             </div>
             <div className="mt-4 space-y-3">
@@ -419,7 +650,7 @@ export default function SupportAgentDashboard() {
                   )}
                 </div>
                 <div>
-                  <h3 className="font-semibold text-white mb-2">Deliveries</h3>
+                  <h3 className="font-semibold text-white mb-2">Delivery Status</h3>
                   {context.deliveries?.length ? (
                     <div className="space-y-2">
                       {context.deliveries.map((delivery) => (
@@ -428,8 +659,21 @@ export default function SupportAgentDashboard() {
                             {delivery.product_id?.name || "Product"}
                           </p>
                           <p className="text-xs text-slate-500">
-                            Qty {delivery.quantity} • Status {delivery.status}
+                            Qty: {delivery.quantity}
                           </p>
+                          <p className={`text-xs mt-1 font-semibold ${
+                            delivery.status === "delivered" ? "text-emerald-400" :
+                            delivery.status === "in-transit" ? "text-blue-400" :
+                            delivery.status === "pending" ? "text-amber-400" :
+                            "text-rose-400"
+                          }`}>
+                            Status: {delivery.status?.charAt(0).toUpperCase() + delivery.status?.slice(1).replace("-", " ") || "Unknown"}
+                          </p>
+                          {delivery.delivery_date && (
+                            <p className="text-xs text-slate-500 mt-1">
+                              Delivered: {new Date(delivery.delivery_date).toLocaleDateString()}
+                            </p>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -454,6 +698,30 @@ export default function SupportAgentDashboard() {
                     </div>
                   ) : (
                     <p className="text-xs text-slate-500">No wishlist items.</p>
+                  )}
+                </div>
+                <div>
+                  <h3 className="font-semibold text-white mb-2">Cart Contents</h3>
+                  {context.cart?.items?.length ? (
+                    <div className="space-y-2">
+                      {context.cart.items.map((item, index) => (
+                        <div key={`${item.product_id?._id || index}`} className="bg-slate-950/40 rounded-xl p-3">
+                          <p className="text-sm font-semibold text-white">
+                            {item.product_id?.name || "Product"}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            Qty: {item.quantity} • ${item.product_id?.price ? (item.product_id.price * item.quantity).toFixed(2) : "0.00"}
+                          </p>
+                        </div>
+                      ))}
+                      <div className="mt-2 pt-2 border-t border-slate-700">
+                        <p className="text-xs text-slate-400">
+                          Total: ${context.cart.total_amount?.toFixed(2) || "0.00"}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-500">Cart is empty.</p>
                   )}
                 </div>
               </div>

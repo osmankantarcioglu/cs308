@@ -10,7 +10,7 @@ router.use(authenticate, requireAdminOrProductManager);
 
 /**
  * @route   GET /reviews/management
- * @desc    Get reviews for moderation
+ * @desc    Get comments for moderation (ratings don't need approval)
  */
 router.get('/management', async function(req, res, next) {
     try {
@@ -25,10 +25,13 @@ router.get('/management', async function(req, res, next) {
         const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 25));
         const skip = (pageNum - 1) * limitNum;
 
-        const query = {};
+        const query = {
+            // Only show reviews with comments (ratings don't need approval)
+            comment: { $exists: true, $ne: null, $ne: '' }
+        };
 
         if (status !== 'all') {
-            query.status = status;
+            query.comment_status = status;
         }
 
         if (search) {
@@ -68,7 +71,7 @@ router.get('/management', async function(req, res, next) {
 
 /**
  * @route   PATCH /reviews/:id/status
- * @desc    Approve or reject a review
+ * @desc    Approve or reject a comment (ratings are always visible, only comments need approval)
  */
 router.patch('/:id/status', async function(req, res, next) {
     try {
@@ -82,21 +85,28 @@ router.patch('/:id/status', async function(req, res, next) {
             throw new ValidationError('Invalid status provided');
         }
 
-        let review;
-        if (status === Enum.REVIEW_STATUS.APPROVED) {
-            review = await Review.approveReview(req.params.id, req.user._id);
-        } else {
-            review = await Review.rejectReview(req.params.id, req.user._id, reason || 'Rejected by product manager');
-        }
+        const review = await Review.findById(req.params.id);
 
         if (!review) {
             throw new NotFoundError('Review not found');
         }
 
+        // Only approve/reject comments, not ratings
+        if (!review.comment || review.comment.trim() === '') {
+            throw new ValidationError('This review has no comment to moderate. Ratings are always visible.');
+        }
+
+        let updatedReview;
+        if (status === Enum.REVIEW_STATUS.APPROVED) {
+            updatedReview = await Review.approveComment(req.params.id, req.user._id);
+        } else {
+            updatedReview = await Review.rejectComment(req.params.id, req.user._id, reason || 'Rejected by product manager');
+        }
+
         res.json({
             success: true,
-            message: status === Enum.REVIEW_STATUS.APPROVED ? 'Review approved' : 'Review rejected',
-            data: await Review.findById(review._id)
+            message: status === Enum.REVIEW_STATUS.APPROVED ? 'Comment approved' : 'Comment rejected',
+            data: await Review.findById(updatedReview._id)
                 .populate('product_id', 'name sku')
                 .populate('customer_id', 'first_name last_name email')
                 .populate('order_id', 'order_number')

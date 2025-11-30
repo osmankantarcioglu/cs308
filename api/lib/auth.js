@@ -98,9 +98,14 @@ const optionalAuthenticate = async (req, res, next) => {
 
         if (user && user.is_active) {
             req.user = user;
+        } else if (user && !user.is_active) {
+            // User exists but is inactive - don't set req.user
+            // Don't log this as it's expected behavior
         }
     } catch (error) {
-        console.warn('Optional authentication failed:', error.message);
+        // Don't log errors for optional authentication - it's expected to fail sometimes
+        // The route handler will handle authentication if needed
+        // This prevents log spam from expired tokens
     } finally {
         next();
     }

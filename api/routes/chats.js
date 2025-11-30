@@ -23,12 +23,33 @@ const validateCustomerAccess = (chat, req, sessionId) => {
         throw new NotFoundError('Chat not found');
     }
 
-    const isSupportAgent = req.user && req.user.role === Enum.USER_ROLES.SUPPORT_AGENT;
-    
-    // If user is authenticated, check if they own the chat
+    // Check if user is authenticated and is a support agent
     if (req.user) {
-        const isChatOwner = chat.user_id && chat.user_id.toString() === req.user._id.toString();
-        if (isSupportAgent || isChatOwner) {
+        const userRole = req.user.role;
+        const isSupportAgent = userRole === Enum.USER_ROLES.SUPPORT_AGENT;
+        
+        // Support agents can access any chat
+        if (isSupportAgent) {
+            return; // Authorized
+        }
+        
+        // If user is authenticated, check if they own the chat
+        // Handle both populated and non-populated user_id
+        let chatUserId = null;
+        if (chat.user_id) {
+            // Check if user_id is populated (object) or just an ID (string/ObjectId)
+            if (typeof chat.user_id === 'object' && chat.user_id._id) {
+                chatUserId = chat.user_id._id.toString();
+            } else if (typeof chat.user_id === 'object' && chat.user_id.toString) {
+                chatUserId = chat.user_id.toString();
+            } else if (typeof chat.user_id === 'string') {
+                chatUserId = chat.user_id;
+            }
+        }
+        
+        const userUserId = req.user._id ? req.user._id.toString() : null;
+        const isChatOwner = chatUserId && userUserId && chatUserId === userUserId;
+        if (isChatOwner) {
             return; // Authorized
         }
     }
@@ -139,6 +160,44 @@ router.get('/queue', authenticate, requireSupportAgent, async function(req, res,
     try {
         const chats = await Chat.find({ status: Enum.CHAT_STATUS.ACTIVE })
             .populate('user_id', 'first_name last_name email')
+            .sort({ last_message_at: -1 })
+            .lean();
+
+        const enrichedChats = await Promise.all(
+            chats.map(async (chat) => {
+                const lastMessage = await ChatMessage.findOne({ chat_id: chat._id })
+                    .sort({ createdAt: -1 })
+                    .lean();
+
+                return {
+                    ...chat,
+                    last_message_preview: lastMessage?.message || '',
+                    last_message_at: lastMessage?.createdAt || chat.updatedAt
+                };
+            })
+        );
+
+        res.json({
+            success: true,
+            data: enrichedChats
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
+/**
+ * @route   GET /chats/claimed
+ * @desc    Get chats claimed by the current agent
+ */
+router.get('/claimed', authenticate, requireSupportAgent, async function(req, res, next) {
+    try {
+        const chats = await Chat.find({ 
+            claimed_by: req.user._id,
+            status: { $in: [Enum.CHAT_STATUS.CLAIMED, Enum.CHAT_STATUS.ACTIVE] }
+        })
+            .populate('user_id', 'first_name last_name email')
+            .populate('claimed_by', 'first_name last_name email')
             .sort({ last_message_at: -1 })
             .lean();
 
@@ -277,9 +336,73 @@ router.post('/:id/claim', authenticate, requireSupportAgent, async function(req,
 router.get('/:id/messages', optionalAuthenticate, async function(req, res, next) {
     try {
         const { session_id } = req.query;
+        const authHeader = req.headers.authorization;
+        const hasToken = authHeader && authHeader.startsWith('Bearer ');
+        
         const chat = await Chat.findById(req.params.id)
             .populate('user_id', 'first_name last_name email');
 
+        if (!chat) {
+            throw new NotFoundError('Chat not found');
+        }
+
+        // Always check token for support agents and customers, regardless of req.user
+        // This ensures we catch users even if optionalAuthenticate failed
+        if (hasToken && !req.user) {
+            try {
+                const jwt = require('jsonwebtoken');
+                const config = require('../config');
+                const Users = require('../db/models/Users');
+                const token = authHeader.substring(7);
+                
+                // Try to verify the token
+                let decoded;
+                try {
+                    decoded = jwt.verify(token, config.JWT.SECRET);
+                } catch (verifyError) {
+                    // Token is invalid or expired - skip authentication
+                    decoded = null;
+                }
+                
+                if (decoded) {
+                    const user = await Users.findById(decoded.userId).select('-password');
+                    
+                    if (user && user.is_active) {
+                        // Set req.user for validation
+                        req.user = user;
+                        
+                        // Support agents can access any chat
+                        if (user.role === Enum.USER_ROLES.SUPPORT_AGENT) {
+                            const messages = await ChatMessage.findByChat(chat._id);
+                            return res.json({
+                                success: true,
+                                data: {
+                                    chat,
+                                    messages
+                                }
+                            });
+                        }
+                    }
+                }
+            } catch (authError) {
+                // Error during authentication - continue to normal validation
+            }
+        }
+        
+        // Check if user is a support agent (from optionalAuthenticate or manual auth)
+        if (req.user && req.user.role === Enum.USER_ROLES.SUPPORT_AGENT) {
+            // Support agents can access any chat - skip validation
+            const messages = await ChatMessage.findByChat(chat._id);
+            return res.json({
+                success: true,
+                data: {
+                    chat,
+                    messages
+                }
+            });
+        }
+
+        // For customers and guests, validate access normally
         validateCustomerAccess(chat, req, session_id);
 
         const messages = await ChatMessage.findByChat(chat._id);
@@ -349,6 +472,8 @@ router.post('/:id/messages', optionalAuthenticate, async function(req, res, next
 
 router.get('/:id/context', authenticate, requireSupportAgent, async function(req, res, next) {
     try {
+        const Cart = require('../db/models/Cart');
+        
         const chat = await Chat.findById(req.params.id);
 
         if (!chat) {
@@ -361,12 +486,13 @@ router.get('/:id/context', authenticate, requireSupportAgent, async function(req
                 data: {
                     orders: [],
                     deliveries: [],
-                    wishlist: []
+                    wishlist: [],
+                    cart: null
                 }
             });
         }
 
-        const [orders, deliveries, wishlistDoc] = await Promise.all([
+        const [orders, deliveries, wishlistDoc, cartDoc] = await Promise.all([
             Order.find({ customer_id: chat.user_id })
                 .populate('items.product_id', 'name images')
                 .sort({ order_date: -1 })
@@ -379,6 +505,9 @@ router.get('/:id/context', authenticate, requireSupportAgent, async function(req
                 .lean(),
             Wishlist.findOne({ user_id: chat.user_id })
                 .populate('products.product_id', 'name images price')
+                .lean(),
+            Cart.findOne({ user_id: chat.user_id })
+                .populate('items.product_id', 'name images price quantity')
                 .lean()
         ]);
 
@@ -387,7 +516,8 @@ router.get('/:id/context', authenticate, requireSupportAgent, async function(req
             data: {
                 orders,
                 deliveries,
-                wishlist: wishlistDoc?.products || []
+                wishlist: wishlistDoc?.products || [],
+                cart: cartDoc || null
             }
         });
     } catch (error) {

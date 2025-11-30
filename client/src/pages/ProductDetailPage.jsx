@@ -19,6 +19,7 @@ export default function ProductDetailPage() {
   const [quantity, setQuantity] = useState(1);
   const [addingToCart, setAddingToCart] = useState(false);
   const [hasPurchased, setHasPurchased] = useState(false);
+  const [isDelivered, setIsDelivered] = useState(false);
   const [checkingPurchase, setCheckingPurchase] = useState(true);
   const [commentDraft, setCommentDraft] = useState("");
   const [reviews, setReviews] = useState([]);
@@ -28,14 +29,17 @@ export default function ProductDetailPage() {
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [reviewRating, setReviewRating] = useState(0);
   const [submittingReview, setSubmittingReview] = useState(false);
+  const [submittingRating, setSubmittingRating] = useState(false);
   const viewCountedRef = useRef(false);
   const isCustomerRole = user?.role === "customer";
-  const canSubmitReview = isAuthenticated && (!isCustomerRole || hasPurchased);
+  const canSubmitReview = isAuthenticated && (!isCustomerRole || isDelivered);
   const reviewCtaMessage = !isAuthenticated
     ? "Please login to share your experience."
     : isCustomerRole && !hasPurchased
       ? "You must purchase this product before leaving a review."
-      : null;
+      : isCustomerRole && hasPurchased && !isDelivered
+        ? "Product must be delivered before you can leave a review or rating."
+        : null;
 
   // Check if product is already in cart
   const isProductInCart = () => {
@@ -140,7 +144,7 @@ export default function ProductDetailPage() {
     fetchReviews();
   }, [fetchReviews]);
 
-  // Check if user has purchased this product
+  // Check if user has purchased and delivered this product
   useEffect(() => {
     const checkPurchaseStatus = async () => {
       try {
@@ -159,14 +163,17 @@ export default function ProductDetailPage() {
         if (response.ok) {
           const data = await response.json();
           if (data.success) {
-            setHasPurchased(data.data.hasPurchased);
+            setHasPurchased(data.data.hasPurchased || false);
+            setIsDelivered(data.data.isDelivered || false);
           }
         } else if (response.status === 401) {
           setHasPurchased(false);
+          setIsDelivered(false);
         }
       } catch (error) {
         console.error('Error checking purchase status:', error);
         setHasPurchased(false);
+        setIsDelivered(false);
       } finally {
         setCheckingPurchase(false);
       }
@@ -202,14 +209,65 @@ export default function ProductDetailPage() {
     setAddingToCart(false);
   };
 
-  const handleSubmitReview = async () => {
+  const handleSubmitRating = async () => {
     if (!isAuthenticated) {
       navigate('/login');
       return;
     }
 
     if (!canSubmitReview) {
-      alert('You must purchase this product before leaving a review.');
+      alert(reviewCtaMessage || 'You cannot submit a rating at this time.');
+      return;
+    }
+
+    if (!token) {
+      alert('Authentication token missing. Please login again.');
+      return;
+    }
+
+    if (!reviewRating) {
+      alert('Please select a rating.');
+      return;
+    }
+
+    try {
+      setSubmittingRating(true);
+      const response = await fetch(`${API_BASE_URL}/${id}/rating`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          rating: reviewRating
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Unable to submit rating');
+      }
+
+      alert('Rating submitted successfully!');
+      setReviewRating(0);
+      fetchReviews();
+    } catch (error) {
+      console.error('Error submitting rating:', error);
+      alert(error.message || 'Unable to submit rating. Please try again.');
+    } finally {
+      setSubmittingRating(false);
+    }
+  };
+
+  const handleSubmitComment = async () => {
+    if (!isAuthenticated) {
+      navigate('/login');
+      return;
+    }
+
+    if (!canSubmitReview) {
+      alert(reviewCtaMessage || 'You cannot submit a comment at this time.');
       return;
     }
 
@@ -220,12 +278,7 @@ export default function ProductDetailPage() {
     
     const message = commentDraft.trim();
     if (!message) {
-      alert('Please enter a comment to submit your review.');
-      return;
-    }
-
-    if (!reviewRating) {
-      alert('Please select a star rating.');
+      alert('Please enter a comment.');
       return;
     }
 
@@ -238,7 +291,6 @@ export default function ProductDetailPage() {
           Authorization: `Bearer ${token}`
         },
         body: JSON.stringify({
-          rating: reviewRating,
           comment: message
         })
       });
@@ -246,17 +298,16 @@ export default function ProductDetailPage() {
       const data = await response.json();
 
       if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Unable to submit review');
+        throw new Error(data.error || 'Unable to submit comment');
       }
 
-      alert('Review submitted! It will appear once approved.');
+      alert('Comment submitted! It will appear once approved by the product manager.');
       setShowReviewModal(false);
       setCommentDraft("");
-      setReviewRating(0);
       fetchReviews();
     } catch (error) {
-      console.error('Error submitting review:', error);
-      alert(error.message || 'Unable to submit review. Please try again.');
+      console.error('Error submitting comment:', error);
+      alert(error.message || 'Unable to submit comment. Please try again.');
     } finally {
       setSubmittingReview(false);
     }
@@ -613,11 +664,11 @@ export default function ProductDetailPage() {
 
         {showReviewModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-            <div className="bg-white rounded-2xl w-full max-w-lg p-6 relative">
+            <div className="bg-white rounded-2xl w-full max-w-lg p-6 relative max-h-[90vh] overflow-y-auto">
               <button
                 className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
                 onClick={() => {
-                  if (!submittingReview) {
+                  if (!submittingReview && !submittingRating) {
                     setShowReviewModal(false);
                   }
                 }}
@@ -633,63 +684,88 @@ export default function ProductDetailPage() {
                 Rate and review <span className="font-semibold text-gray-900">{product.name}</span>
               </p>
 
-              <div className="flex items-center justify-center gap-2 mb-6">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <button
-                    key={star}
-                    type="button"
-                    onClick={() => setReviewRating(star)}
-                    className="focus:outline-none"
-                  >
-                    <svg
-                      className={`w-10 h-10 ${star <= reviewRating ? "text-yellow-400" : "text-gray-300"}`}
-                      fill={star <= reviewRating ? "currentColor" : "none"}
-                      stroke="currentColor"
-                      strokeWidth={1.5}
-                      viewBox="0 0 24 24"
+              {/* Rating Section */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Your Rating (1-5 Stars)</label>
+                <div className="flex items-center justify-center gap-2">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      onClick={() => setReviewRating(star)}
+                      className="focus:outline-none"
                     >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M11.48 3.499a.75.75 0 011.04 0l2.155 2.137a.75.75 0 00.564.221l2.982-.062a.75.75 0 01.535 1.299l-2.126 2.153a.75.75 0 00-.213.621l.496 2.954a.75.75 0 01-1.084.79l-2.657-1.365a.75.75 0 00-.676 0l-2.657 1.365a.75.75 0 01-1.084-.79l.496-2.954a.75.75 0 00-.213-.621L5.244 7.094a.75.75 0 01.535-1.299l2.982.062a.75.75 0 00.564-.221L11.48 3.5z"
-                      />
-                    </svg>
-                  </button>
-                ))}
+                      <svg
+                        className={`w-10 h-10 ${star <= reviewRating ? "text-yellow-400" : "text-gray-300"}`}
+                        fill={star <= reviewRating ? "currentColor" : "none"}
+                        stroke="currentColor"
+                        strokeWidth={1.5}
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M11.48 3.499a.75.75 0 011.04 0l2.155 2.137a.75.75 0 00.564.221l2.982-.062a.75.75 0 01.535 1.299l-2.126 2.153a.75.75 0 00-.213.621l.496 2.954a.75.75 0 01-1.084.79l-2.657-1.365a.75.75 0 00-.676 0l-2.657 1.365a.75.75 0 01-1.084-.79l.496-2.954a.75.75 0 00-.213-.621L5.244 7.094a.75.75 0 01.535-1.299l2.982.062a.75.75 0 00.564-.221L11.48 3.5z"
+                        />
+                      </svg>
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSubmitRating}
+                  disabled={submittingRating || !reviewRating}
+                  className={`mt-3 w-full px-4 py-2 rounded-lg font-semibold text-white transition-colors ${
+                    submittingRating || !reviewRating
+                      ? "bg-gray-300 cursor-not-allowed"
+                      : "bg-primary hover:bg-primary-dark"
+                  }`}
+                >
+                  {submittingRating ? "Submitting..." : "Submit Rating"}
+                </button>
+                <p className="text-xs text-gray-500 mt-2 text-center">
+                  Ratings are immediately visible (no approval needed)
+                </p>
               </div>
 
-              <textarea
-                value={commentDraft}
-                onChange={(e) => setCommentDraft(e.target.value)}
-                rows={4}
-                placeholder="Share details about what you liked or didn’t like..."
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-              />
+              <div className="border-t pt-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Your Comment (Optional)</label>
+                <textarea
+                  value={commentDraft}
+                  onChange={(e) => setCommentDraft(e.target.value)}
+                  rows={4}
+                  placeholder="Share details about what you liked or didn't like..."
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                />
+                <button
+                  type="button"
+                  onClick={handleSubmitComment}
+                  disabled={submittingReview || !commentDraft.trim()}
+                  className={`mt-3 w-full px-4 py-2 rounded-lg font-semibold text-white transition-colors ${
+                    submittingReview || !commentDraft.trim()
+                      ? "bg-gray-300 cursor-not-allowed"
+                      : "bg-primary hover:bg-primary-dark"
+                  }`}
+                >
+                  {submittingReview ? "Submitting..." : "Submit Comment"}
+                </button>
+                <p className="text-xs text-gray-500 mt-2 text-center">
+                  Comments require approval from product manager before being visible
+                </p>
+              </div>
 
               <div className="flex items-center justify-end gap-3 mt-6">
                 <button
                   type="button"
                   onClick={() => {
-                    if (!submittingReview) {
+                    if (!submittingReview && !submittingRating) {
                       setShowReviewModal(false);
                     }
                   }}
                   className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 transition-colors"
-                  disabled={submittingReview}
+                  disabled={submittingReview || submittingRating}
                 >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSubmitReview}
-                  disabled={submittingReview || !commentDraft.trim() || !reviewRating}
-                  className={`px-6 py-3 rounded-lg font-semibold text-white transition-colors ${
-                    submittingReview || !commentDraft.trim() || !reviewRating
-                      ? "bg-gray-300 cursor-not-allowed"
-                      : "bg-primary hover:bg-primary-dark"
-                  }`}
-                >
-                  {submittingReview ? "Submitting..." : "Submit Review"}
+                  Close
                 </button>
               </div>
             </div>

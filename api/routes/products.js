@@ -3,6 +3,7 @@ var router = express.Router();
 const Product = require('../db/models/Product');
 const Review = require('../db/models/Review');
 const Order = require('../db/models/Order');
+const Delivery = require('../db/models/Delivery');
 const Enum = require('../config/Enum');
 const { NotFoundError, ValidationError } = require('../lib/Error');
 const { authenticate, optionalAuthenticate } = require('../lib/auth');
@@ -11,24 +12,24 @@ const { requireAdmin, requireAdminOrProductManager } = require('../lib/middlewar
 /**
  * @route   GET /products
  * @desc    Get all products with optional filtering
- * @params  query params: category, search, minPrice, maxPrice, page, limit
+ * @params  query params: category, search, minPrice, maxPrice, page, limit, sortBy
  */
 router.get('/', async function(req, res, next) {
     try {
-        const { category, search, minPrice, maxPrice, page = 1, limit = 10 } = req.query;
+        const { category, search, minPrice, maxPrice, page = 1, limit = 10, sortBy } = req.query;
         const Category = require('../db/models/Category');
         
         // Get active category IDs first (more efficient)
         const activeCategories = await Category.find({ is_active: true }).select('_id');
         const activeCategoryIds = activeCategories.map(cat => cat._id);
         
-        // Build query
-        let query = {};
+        // Build query - use $and to properly combine all conditions
+        const queryConditions = [];
         
         // Only show active products
-        query.is_active = true;
+        queryConditions.push({ is_active: true });
         
-        // Filter by category (only if category is provided)
+        // Filter by category
         if (category) {
             // Verify requested category is active
             if (!activeCategoryIds.some(id => id.toString() === category)) {
@@ -46,55 +47,67 @@ router.get('/', async function(req, res, next) {
                     }
                 });
             }
-            query.category = category;
+            queryConditions.push({ category: category });
         } else {
             // If no category filter, only show products with active categories (or no category)
-            query.$or = [
-                { category: { $in: activeCategoryIds } },
-                { category: null }
-            ];
+            queryConditions.push({
+                $or: [
+                    { category: { $in: activeCategoryIds } },
+                    { category: null }
+                ]
+            });
         }
         
         // Search by name or description
-        if (search) {
-            const searchCondition = {
+        if (search && search.trim()) {
+            queryConditions.push({
                 $or: [
-                    { name: { $regex: search, $options: 'i' } },
-                    { description: { $regex: search, $options: 'i' } }
+                    { name: { $regex: search.trim(), $options: 'i' } },
+                    { description: { $regex: search.trim(), $options: 'i' } }
                 ]
-            };
-            // If we already have $or for category, use $and to combine
-            if (query.$or) {
-                query = {
-                    ...query,
-                    $and: [
-                        { $or: query.$or },
-                        searchCondition
-                    ]
-                };
-                delete query.$or;
-            } else {
-                query.$or = searchCondition.$or;
-            }
+            });
         }
         
         // Filter by price range
         if (minPrice || maxPrice) {
-            query.price = {};
-            if (minPrice) query.price.$gte = parseFloat(minPrice);
-            if (maxPrice) query.price.$lte = parseFloat(maxPrice);
+            const priceCondition = {};
+            if (minPrice) priceCondition.$gte = parseFloat(minPrice);
+            if (maxPrice) priceCondition.$lte = parseFloat(maxPrice);
+            queryConditions.push({ price: priceCondition });
+        }
+        
+        // Combine all conditions with $and
+        const query = queryConditions.length > 1 ? { $and: queryConditions } : queryConditions[0] || {};
+        
+        // Build sort object
+        let sortObject = { popularity_score: -1, createdAt: -1 }; // Default sort
+        if (sortBy) {
+            switch (sortBy) {
+                case 'price_asc':
+                    sortObject = { price: 1, createdAt: -1 };
+                    break;
+                case 'price_desc':
+                    sortObject = { price: -1, createdAt: -1 };
+                    break;
+                case 'popularity':
+                    sortObject = { popularity_score: -1, view_count: -1, createdAt: -1 };
+                    break;
+                default:
+                    // Keep default sort
+                    break;
+            }
         }
         
         // Apply pagination
         const skip = (parseInt(page) - 1) * parseInt(limit);
         
-        // Find products with active categories
+        // Find products
         const products = await Product.find(query)
             .populate('category', 'name')
             .populate('created_by', 'username email')
+            .sort(sortObject)
             .skip(skip)
-            .limit(parseInt(limit))
-            .sort({ popularity_score: -1, createdAt: -1 });
+            .limit(parseInt(limit));
         
         // Get total count
         const total = await Product.countDocuments(query);
@@ -453,7 +466,7 @@ router.post('/:id/stock/decrease', authenticate, requireAdminOrProductManager, a
 
 /**
  * @route   GET /products/:id/reviews
- * @desc    Fetch approved, visible reviews for a product
+ * @desc    Fetch approved comments and all ratings for a product
  */
 router.get('/:id/reviews', async function(req, res, next) {
     try {
@@ -464,11 +477,13 @@ router.get('/:id/reviews', async function(req, res, next) {
             throw new NotFoundError('Product not found');
         }
 
-        const [visibleReviews, ratingDocuments] = await Promise.all([
+        // Get all reviews with approved comments (ratings are always visible)
+        const [visibleReviews, allRatings] = await Promise.all([
             Review.find({
                 product_id: req.params.id,
-                status: Enum.REVIEW_STATUS.APPROVED,
-                is_visible: true
+                comment_status: Enum.REVIEW_STATUS.APPROVED,
+                is_visible: true,
+                comment: { $exists: true, $ne: null, $ne: '' }
             })
             .populate('customer_id', 'first_name last_name role')
             .sort({ createdAt: -1 }),
@@ -478,9 +493,9 @@ router.get('/:id/reviews', async function(req, res, next) {
             }).select('rating')
         ]);
 
-        const reviewCount = ratingDocuments.length;
+        const reviewCount = allRatings.length;
         const averageRating = reviewCount
-            ? Number((ratingDocuments.reduce((sum, review) => sum + (review.rating || 0), 0) / reviewCount).toFixed(1))
+            ? Number((allRatings.reduce((sum, review) => sum + (review.rating || 0), 0) / reviewCount).toFixed(1))
             : 0;
 
         res.json({
@@ -501,18 +516,113 @@ router.get('/:id/reviews', async function(req, res, next) {
 });
 
 /**
- * @route   POST /products/:id/reviews
- * @desc    Submit or update a review for a product
+ * Helper function to check if product has been delivered to user
  */
-router.post('/:id/reviews', authenticate, async function(req, res, next) {
+async function checkDeliveryStatus(userId, productId, userRole) {
+    if (userRole !== Enum.USER_ROLES.CUSTOMER) {
+        // Non-customers can always review
+        return { canReview: true, order: null, delivery: null };
+    }
+
+    // Find completed order with this product
+    const order = await Order.findOne({
+        customer_id: userId,
+        payment_status: Enum.PAYMENT_STATUS.COMPLETED,
+        'items.product_id': productId
+    }).sort({ createdAt: -1 });
+
+    if (!order) {
+        return { canReview: false, order: null, delivery: null, reason: 'You must purchase this product before leaving a review.' };
+    }
+
+    // Check if product has been delivered
+    const delivery = await Delivery.findOne({
+        customer_id: userId,
+        order_id: order._id,
+        product_id: productId,
+        status: Enum.DELIVERY_STATUS.DELIVERED
+    });
+
+    if (!delivery) {
+        return { canReview: false, order, delivery: null, reason: 'Product must be delivered before you can leave a review or rating.' };
+    }
+
+    return { canReview: true, order, delivery };
+}
+
+/**
+ * @route   POST /products/:id/rating
+ * @desc    Submit or update a rating for a product (ratings are immediately visible, no approval needed)
+ */
+router.post('/:id/rating', authenticate, async function(req, res, next) {
     try {
-        const { rating, comment } = req.body;
+        const { rating } = req.body;
         const parsedRating = Number(rating);
-        const trimmedComment = (comment || '').trim();
 
         if (!parsedRating || parsedRating < 1 || parsedRating > 5) {
             throw new ValidationError('Rating must be between 1 and 5 stars');
         }
+
+        const product = await Product.findById(req.params.id);
+
+        if (!product) {
+            throw new NotFoundError('Product not found');
+        }
+
+        // Check delivery status
+        const deliveryCheck = await checkDeliveryStatus(req.user._id, req.params.id, req.user.role);
+        if (!deliveryCheck.canReview) {
+            throw new ValidationError(deliveryCheck.reason);
+        }
+
+        // Find or create review
+        let review = await Review.findOne({
+            product_id: req.params.id,
+            customer_id: req.user._id
+        });
+
+        if (review) {
+            review.rating = parsedRating;
+            review.order_id = deliveryCheck.order ? deliveryCheck.order._id : review.order_id;
+            review.updated_by = req.user._id;
+            await review.save();
+        } else {
+            review = await Review.create({
+                product_id: req.params.id,
+                customer_id: req.user._id,
+                order_id: deliveryCheck.order ? deliveryCheck.order._id : undefined,
+                rating: parsedRating,
+                comment_status: Enum.REVIEW_STATUS.PENDING, // Default for when comment is added later
+                status: Enum.REVIEW_STATUS.PENDING, // For backward compatibility
+                created_by: req.user._id,
+                updated_by: req.user._id
+            });
+        }
+
+        res.status(201).json({
+            success: true,
+            message: 'Rating submitted successfully',
+            data: review
+        });
+    } catch (error) {
+        if (error.code === 11000) {
+            next(new ValidationError('You have already submitted a rating for this product.'));
+        } else if (error.name === 'CastError') {
+            next(new NotFoundError('Invalid product ID'));
+        } else {
+            next(error);
+        }
+    }
+});
+
+/**
+ * @route   POST /products/:id/reviews
+ * @desc    Submit or update a comment for a product (comments require approval)
+ */
+router.post('/:id/reviews', authenticate, async function(req, res, next) {
+    try {
+        const { comment } = req.body;
+        const trimmedComment = (comment || '').trim();
 
         if (!trimmedComment) {
             throw new ValidationError('Comment is required');
@@ -524,60 +634,39 @@ router.post('/:id/reviews', authenticate, async function(req, res, next) {
             throw new NotFoundError('Product not found');
         }
 
-        let relatedOrder = null;
-
-        if (req.user.role === Enum.USER_ROLES.CUSTOMER) {
-            relatedOrder = await Order.findOne({
-                customer_id: req.user._id,
-                payment_status: Enum.PAYMENT_STATUS.COMPLETED,
-                'items.product_id': req.params.id
-            }).sort({ createdAt: -1 });
-
-            if (!relatedOrder) {
-                throw new ValidationError('You must purchase this product before leaving a review.');
-            }
-        } else {
-            relatedOrder = await Order.findOne({
-                customer_id: req.user._id,
-                'items.product_id': req.params.id
-            }).sort({ createdAt: -1 }) || null;
+        // Check delivery status
+        const deliveryCheck = await checkDeliveryStatus(req.user._id, req.params.id, req.user.role);
+        if (!deliveryCheck.canReview) {
+            throw new ValidationError(deliveryCheck.reason);
         }
 
+        // Find or create review
         let review = await Review.findOne({
             product_id: req.params.id,
             customer_id: req.user._id
         });
 
         if (review) {
-            review.rating = parsedRating;
             review.comment = trimmedComment;
-            review.order_id = relatedOrder ? relatedOrder._id : review.order_id;
-            review.status = Enum.REVIEW_STATUS.PENDING;
-            review.is_visible = false;
+            review.comment_status = Enum.REVIEW_STATUS.PENDING; // Comment needs approval
+            review.status = Enum.REVIEW_STATUS.PENDING; // For backward compatibility
+            review.is_visible = false; // Comment not visible until approved
+            review.order_id = deliveryCheck.order ? deliveryCheck.order._id : review.order_id;
             review.updated_by = req.user._id;
             await review.save();
         } else {
-            review = await Review.create({
-                product_id: req.params.id,
-                customer_id: req.user._id,
-                order_id: relatedOrder ? relatedOrder._id : undefined,
-                rating: parsedRating,
-                comment: trimmedComment,
-                status: Enum.REVIEW_STATUS.PENDING,
-                is_visible: false,
-                created_by: req.user._id,
-                updated_by: req.user._id
-            });
+            // If no review exists, require a rating first
+            throw new ValidationError('Please submit a rating first before adding a comment.');
         }
 
         res.status(201).json({
             success: true,
-            message: 'Review submitted and awaiting approval',
+            message: 'Comment submitted and awaiting approval',
             data: review
         });
     } catch (error) {
         if (error.code === 11000) {
-            next(new ValidationError('You have already submitted a review for this product.'));
+            next(new ValidationError('You have already submitted a comment for this product.'));
         } else if (error.name === 'CastError') {
             next(new NotFoundError('Invalid product ID'));
         } else {
@@ -599,7 +688,8 @@ router.get('/:id/purchased', optionalAuthenticate, async function(req, res, next
             return res.json({
                 success: true,
                 data: {
-                    hasPurchased: false
+                    hasPurchased: false,
+                    isDelivered: false
                 }
             });
         }
@@ -611,10 +701,24 @@ router.get('/:id/purchased', optionalAuthenticate, async function(req, res, next
             'items.product_id': req.params.id
         });
         
+        const hasPurchased = orders.length > 0;
+        
+        // Check if product has been delivered
+        let isDelivered = false;
+        if (hasPurchased) {
+            const delivery = await Delivery.findOne({
+                customer_id: userId,
+                product_id: req.params.id,
+                status: Enum.DELIVERY_STATUS.DELIVERED
+            });
+            isDelivered = !!delivery;
+        }
+        
         res.json({
             success: true,
             data: {
-                hasPurchased: orders.length > 0
+                hasPurchased,
+                isDelivered
             }
         });
     } catch (error) {
