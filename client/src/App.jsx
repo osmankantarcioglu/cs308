@@ -20,12 +20,15 @@ import AdminLoginPage from "./pages/AdminLoginPage";
 import AdminRoute from "./components/AdminRoute";
 import ProductManagerRoute from "./components/ProductManagerRoute";
 import SupportAgentRoute from "./components/SupportAgentRoute";
+import SalesManagerRoute from "./components/SalesManagerRoute";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import ProductManagerLoginPage from "./pages/ProductManagerLoginPage";
 import ProductManagerDashboard from "./pages/ProductManagerDashboard";
 import SupportAgentLoginPage from "./pages/SupportAgentLoginPage";
 import SupportAgentDashboard from "./pages/SupportAgentDashboard";
+import SalesManagerLoginPage from "./pages/SalesManagerLoginPage";
+import SalesManagerDashboard from "./pages/SalesManagerDashboard";
 import AboutPage from "./pages/AboutPage";
 import PrivacyPolicyPage from "./pages/PrivacyPolicyPage";
 import TermsOfServicePage from "./pages/TermsOfServicePage";
@@ -72,6 +75,15 @@ export default function App() {
           <Route path="/product-manager/dashboard" element={<ProductManagerRoute><ProductManagerDashboard /></ProductManagerRoute>} />
           <Route path="/support" element={<SupportAgentLoginPage />} />
           <Route path="/support/dashboard" element={<SupportAgentRoute><SupportAgentDashboard /></SupportAgentRoute>} />
+          <Route path="/sales" element={<SalesManagerLoginPage />} />
+          <Route
+            path="/sales/dashboard"
+            element={
+              <SalesManagerRoute>
+                <SalesManagerDashboard />
+              </SalesManagerRoute>
+            }
+          />
             </Routes>
             <CustomerChatWidget />
             <Footer />
