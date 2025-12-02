@@ -1,7 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
+//import { downloadInvoicePdf } from "../lib/invoicePdf";
+import { generateInvoicePdf, downloadInvoicePdf } from "../lib/invoicePdf";
+
+
 
 const API_BASE_URL = "http://localhost:3000/orders";
 
@@ -15,7 +19,14 @@ export default function CheckoutSuccessPage() {
   const [order, setOrder] = useState(null);
   const [error, setError] = useState(null);
 
+  const [emailSent, setEmailSent] = useState(false);
+
+  const orderRequestRef = useRef(false);
+  const emailRequestRef = useRef(false);
+
   useEffect(() => {
+    if (orderRequestRef.current) return;
+    orderRequestRef.current = true;
     const completeOrder = async () => {
       const sessionId = searchParams.get('session_id');
       
@@ -43,22 +54,203 @@ export default function CheckoutSuccessPage() {
         const data = await response.json();
         
         if (data.success) {
-          setOrder(data.data);
-          // Refresh cart to show it's empty
+          const baseOrder = data.data; 
+  
+          let finalOrder = baseOrder;
+          try {
+            const detailsResp = await fetch(
+              `${API_BASE_URL}/${baseOrder._id}`,
+              {
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  "Content-Type": "application/json",
+                },
+              }
+            );
+  
+            if (detailsResp.ok) {
+              const detailsData = await detailsResp.json();
+              if (detailsData.success && detailsData.data) {
+                finalOrder = detailsData.data;
+              }
+            }
+          } catch (e) {
+            console.error("Failed to fetch full order details", e);
+          }
+  
+          console.log(
+            "ORDER USED FOR INVOICE ===>",
+            JSON.stringify(finalOrder, null, 2)
+          );
+  
+          setOrder(finalOrder);
           await fetchCart();
         } else {
-          throw new Error('Failed to create order');
+          throw new Error("Failed to create order");
         }
       } catch (err) {
-        console.error('Error completing order:', err);
+        console.error("Error completing order:", err);
         setError(err.message);
       } finally {
         setLoading(false);
       }
     };
-    
+  
     completeOrder();
   }, [searchParams, token, fetchCart]);
+
+
+  function buildInvoicePayload(order) {
+    const subtotal = order.subtotal || 0;
+    const totalTaxAmount = order.tax_amount || 0;
+    const totalDiscountAmount = order.discount_amount || 0;
+  
+    const taxRate =
+      subtotal > 0 ? (totalTaxAmount / subtotal) * 100 : 0;
+    const discountRate =
+      subtotal > 0 ? (totalDiscountAmount / subtotal) * 100 : 0;
+  
+    const taxRateRounded = Math.round(taxRate * 100) / 100;
+    const discountRateRounded = Math.round(discountRate * 100) / 100;
+  
+    const rawItems = order.items || [];
+  
+    const items = rawItems.map((it) => {
+      const product = it.product_id || {};
+  
+      return {
+        name: product.name || it.name || "Item",
+        quantity: it.quantity || 1,
+        price: it.price_at_time ?? product.price ?? 0,
+        tax: taxRateRounded,        
+        discount: discountRateRounded, 
+      };
+    });
+  
+    const customer = order.customer_id || {};
+    const customerName =
+      [customer.first_name, customer.last_name].filter(Boolean).join(" ") ||
+      "Customer";
+  
+    const customerEmail = customer.email || "";
+    const customerAddress = order.delivery_address || "";
+  
+    const payload = {
+      company: {
+        name: "TechHub Store",
+        address: "Orta Mah. Kampus Cd. Sabanci Universitesi\nTuzla / Istanbul",
+        phone: "+90 (216) 123 45 67",
+        email: "support@cs308-techhub.com",
+        website: "cs308-techhub.com",
+        taxId: "Tax ID: 1234567890",
+        bank: "IBAN: TR12 3456 7890 1234 5678 9012 34",
+      },
+      customer: {
+        name: customerName,
+        company: "",
+        address: customerAddress,
+        phone: "",
+        email: customerEmail,
+        taxId: "",
+      },
+      invoice: {
+        label: "Invoice",
+        number: order.order_number || order._id || "1",
+        date: order.order_date
+          ? new Date(order.order_date).toLocaleDateString("en-US")
+          : undefined,
+        dueDate: undefined,
+        status: order.payment_status || "completed",
+        locale: "en-US",
+        currency: "USD",
+        orderDiscount: order.discount_amount || 0,
+        fee: order.shipping_cost || 0,
+        taxAmount: order.tax_amount || 0,
+        subtotal: order.subtotal || 0,
+      },
+      items,
+      note:
+        "Thank you for your purchase! This invoice was generated for the CS308 project.",
+      qr: null,
+    };
+
+    return payload;
+  }
+
+  useEffect(() => {
+    const sendInvoiceEmailAutomatically = async () => {
+      if (!order || !token || emailSent) return;
+
+      const orderId = order._id;
+      if (!orderId) return;
+
+      if (emailRequestRef.current) {
+        return;
+      }
+      emailRequestRef.current = true;
+
+      let sentOrders = [];
+      try {
+        const stored = localStorage.getItem("emailedOrders");
+        if (stored) {
+          sentOrders = JSON.parse(stored);
+        }
+      } catch (e) {
+        console.warn("Could not parse emailedOrders from localStorage", e);
+      }
+
+      if (sentOrders.includes(orderId)) {
+        console.log("Invoice email already sent for this order, skipping.");
+        setEmailSent(true);
+        return;
+      }
+
+      try {
+        console.log("AUTO EMAIL - ORDER USED FOR INVOICE ===>", order);
+        const payload = buildInvoicePayload(order);
+
+        const doc = generateInvoicePdf(payload);
+        const dataUri = doc.output("datauristring");
+        const pdfBase64 = dataUri.split(",")[1];
+
+        const response = await fetch("http://localhost:3000/email/send-invoice", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`, 
+          },
+          body: JSON.stringify({
+            orderId: orderId,
+            pdfBase64,
+          }),
+        });
+
+        const resData = await response.json().catch(() => ({}));
+        console.log("EMAIL API RESPONSE ===>", resData);
+
+        if (!response.ok || resData.success === false) {
+          console.error("Email sending failed:", resData);
+        } else {
+          setEmailSent(true);
+          const updated = Array.from(new Set([...sentOrders, orderId]));
+          localStorage.setItem("emailedOrders", JSON.stringify(updated));
+        }
+      } catch (err) {
+        console.error("Error while sending invoice email:", err);
+      }
+    };
+
+    sendInvoiceEmailAutomatically();
+  }, [order, token, emailSent]);
+
+  async function handleDownloadInvoice() {
+    if (!order) return;
+    console.log("ORDER USED FOR INVOICE ===>", order);
+  
+    const payload = buildInvoicePayload(order);
+    const filename = `invoice-${order.order_number || order._id || "order"}.pdf`;
+    downloadInvoicePdf(payload, filename);
+  }
 
   if (loading) {
     return (
@@ -143,6 +335,13 @@ export default function CheckoutSuccessPage() {
           </div>
 
           <div className="flex flex-col sm:flex-row gap-4">
+            <button
+              onClick={handleDownloadInvoice}
+              className="flex-1 px-6 py-3 bg-primary text-white font-semibold rounded-lg hover:bg-primary-dark transition-colors text-center"
+            >
+              Download Invoice PDF
+            </button>
+
             <Link
               to="/profile"
               className="flex-1 px-6 py-3 bg-primary text-white font-semibold rounded-lg hover:bg-primary-dark transition-colors text-center"
@@ -185,4 +384,3 @@ export default function CheckoutSuccessPage() {
     </div>
   );
 }
-

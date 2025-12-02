@@ -9,6 +9,8 @@ const { authenticate } = require('../lib/auth');
 const { NotFoundError, ValidationError } = require('../lib/Error');
 const Enum = require('../config/Enum');
 const { requireAdminOrProductManager } = require('../lib/middleware');
+const { sendInvoiceEmail } = require('../lib/invoiceEmail');
+
 
 // Initialize Stripe only if API key is provided
 let stripe = null;
@@ -317,6 +319,23 @@ router.post('/complete-order', authenticate, async function(req, res, next) {
         
         console.log('Order created:', order.order_number);
 
+        const populatedOrder = await Order.findById(order._id)
+        .populate('items.product_id', 'name price')      
+        .populate('customer_id', 'first_name last_name email'); 
+
+        console.log(
+            'POPULATED ORDER ===>',
+            JSON.stringify(populatedOrder.toJSON(), null, 2)
+        );
+
+        /*try {
+            await sendInvoiceEmail(populatedOrder);
+          } catch (e) {
+            console.error('Error sending invoice email:', e.message);
+        }*/
+
+        //const pdfBuffer = await buildInvoicePdf(populatedOrder);
+
         // Create delivery tasks for each order item
         if (orderItems.length > 0) {
             const deliveryPayload = orderItems.map((item) => ({
@@ -366,7 +385,7 @@ router.post('/complete-order', authenticate, async function(req, res, next) {
         res.json({
             success: true,
             message: 'Order created successfully',
-            data: order
+            data: populatedOrder
         });
     } catch (error) {
         next(error);
