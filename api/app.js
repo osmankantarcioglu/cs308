@@ -20,6 +20,8 @@ var reviewsRouter = require('./routes/reviews');
 var chatsRouter = require('./routes/chats');
 
 var emailRouter = require('./routes/email');
+var refundsRouter = require('./routes/refunds');
+var notificationsRouter = require('./routes/notifications');
 
 
 var app = express();
@@ -55,6 +57,8 @@ app.use('/deliveries', deliveriesRouter); // http://localhost:3000/deliveries
 app.use('/reviews', reviewsRouter); // http://localhost:3000/reviews
 app.use('/chats', chatsRouter); // http://localhost:3000/chats
 app.use('/email', emailRouter);
+app.use('/refunds', refundsRouter);
+app.use('/notifications', notificationsRouter);
 
 
 // catch 404 and forward to error handler
@@ -69,7 +73,8 @@ app.use(function(req, res, next) {
       req.path.startsWith('/categories') ||
       req.path.startsWith('/deliveries') ||
       req.path.startsWith('/reviews') ||
-      req.path.startsWith('/chats')) {
+      req.path.startsWith('/chats') ||
+      req.path.startsWith('/refunds')) {
     return res.status(404).json({
       success: false,
       error: 'Endpoint not found'
@@ -90,7 +95,8 @@ app.use(function(err, req, res, next) {
                        req.path.startsWith('/categories') ||
                        req.path.startsWith('/deliveries') ||
                        req.path.startsWith('/reviews') ||
-                       req.path.startsWith('/chats');
+                       req.path.startsWith('/chats') ||
+                       req.path.startsWith('/refunds');
   
   if (isApiRequest) {
     // Return JSON error for API endpoints

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
@@ -19,7 +19,14 @@ export default function CheckoutSuccessPage() {
   const [order, setOrder] = useState(null);
   const [error, setError] = useState(null);
 
+  const [emailSent, setEmailSent] = useState(false);
+
+  const orderRequestRef = useRef(false);
+  const emailRequestRef = useRef(false);
+
   useEffect(() => {
+    if (orderRequestRef.current) return;
+    orderRequestRef.current = true;
     const completeOrder = async () => {
       const sessionId = searchParams.get('session_id');
       
@@ -92,10 +99,8 @@ export default function CheckoutSuccessPage() {
     completeOrder();
   }, [searchParams, token, fetchCart]);
 
-  async function handleDownloadInvoice() {
-    if (!order) return;
-    console.log("ORDER USED FOR INVOICE ===>", order);
-  
+
+  function buildInvoicePayload(order) {
     const subtotal = order.subtotal || 0;
     const totalTaxAmount = order.tax_amount || 0;
     const totalDiscountAmount = order.discount_amount || 0;
@@ -108,7 +113,6 @@ export default function CheckoutSuccessPage() {
     const taxRateRounded = Math.round(taxRate * 100) / 100;
     const discountRateRounded = Math.round(discountRate * 100) / 100;
   
-    // ---- 2) ITEMS ----
     const rawItems = order.items || [];
   
     const items = rawItems.map((it) => {
@@ -123,7 +127,6 @@ export default function CheckoutSuccessPage() {
       };
     });
   
-    // ---- 3) CUSTOMER ----
     const customer = order.customer_id || {};
     const customerName =
       [customer.first_name, customer.last_name].filter(Boolean).join(" ") ||
@@ -132,7 +135,6 @@ export default function CheckoutSuccessPage() {
     const customerEmail = customer.email || "";
     const customerAddress = order.delivery_address || "";
   
-    // ---- 4) INVOICE PAYLOAD ----
     const payload = {
       company: {
         name: "TechHub Store",
@@ -171,45 +173,84 @@ export default function CheckoutSuccessPage() {
         "Thank you for your purchase! This invoice was generated for the CS308 project.",
       qr: null,
     };
-  
-    /*downloadInvoicePdf(
-      payload,
-      `invoice-${order.order_number || order._id || "order"}.pdf`
-    );*/
 
-    const filename = `invoice-${order.order_number || order._id || "order"}.pdf`;
-  downloadInvoicePdf(payload, filename);
-
-  try {
-    const doc = generateInvoicePdf(payload);
-
-    // datauristring → "data:application/pdf;base64,...."
-    const dataUri = doc.output("datauristring");
-    const pdfBase64 = dataUri.split(",")[1]; 
-
-    const response = await fetch("http://localhost:3000/email/send-invoice", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`, 
-      },
-      body: JSON.stringify({
-        orderId: order._id,
-        pdfBase64,
-      }),
-    });
-
-    const resData = await response.json();
-    console.log("EMAIL API RESPONSE ===>", resData);
-
-    if (!response.ok) {
-      console.error("Email sending failed:", resData);
-    }
-  } catch (err) {
-    console.error("Error while sending invoice email:", err);
+    return payload;
   }
-    }
 
+  useEffect(() => {
+    const sendInvoiceEmailAutomatically = async () => {
+      if (!order || !token || emailSent) return;
+
+      const orderId = order._id;
+      if (!orderId) return;
+
+      if (emailRequestRef.current) {
+        return;
+      }
+      emailRequestRef.current = true;
+
+      let sentOrders = [];
+      try {
+        const stored = localStorage.getItem("emailedOrders");
+        if (stored) {
+          sentOrders = JSON.parse(stored);
+        }
+      } catch (e) {
+        console.warn("Could not parse emailedOrders from localStorage", e);
+      }
+
+      if (sentOrders.includes(orderId)) {
+        console.log("Invoice email already sent for this order, skipping.");
+        setEmailSent(true);
+        return;
+      }
+
+      try {
+        console.log("AUTO EMAIL - ORDER USED FOR INVOICE ===>", order);
+        const payload = buildInvoicePayload(order);
+
+        const doc = generateInvoicePdf(payload);
+        const dataUri = doc.output("datauristring");
+        const pdfBase64 = dataUri.split(",")[1];
+
+        const response = await fetch("http://localhost:3000/email/send-invoice", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`, 
+          },
+          body: JSON.stringify({
+            orderId: orderId,
+            pdfBase64,
+          }),
+        });
+
+        const resData = await response.json().catch(() => ({}));
+        console.log("EMAIL API RESPONSE ===>", resData);
+
+        if (!response.ok || resData.success === false) {
+          console.error("Email sending failed:", resData);
+        } else {
+          setEmailSent(true);
+          const updated = Array.from(new Set([...sentOrders, orderId]));
+          localStorage.setItem("emailedOrders", JSON.stringify(updated));
+        }
+      } catch (err) {
+        console.error("Error while sending invoice email:", err);
+      }
+    };
+
+    sendInvoiceEmailAutomatically();
+  }, [order, token, emailSent]);
+
+  async function handleDownloadInvoice() {
+    if (!order) return;
+    console.log("ORDER USED FOR INVOICE ===>", order);
+  
+    const payload = buildInvoicePayload(order);
+    const filename = `invoice-${order.order_number || order._id || "order"}.pdf`;
+    downloadInvoicePdf(payload, filename);
+  }
 
   if (loading) {
     return (
@@ -343,4 +384,3 @@ export default function CheckoutSuccessPage() {
     </div>
   );
 }
-
