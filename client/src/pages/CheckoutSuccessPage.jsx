@@ -91,7 +91,7 @@ export default function CheckoutSuccessPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 py-12">
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-2xl">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-5xl">
         {/* Success Message */}
         <div className="bg-white rounded-xl shadow-lg p-8 text-center mb-8">
           <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -104,9 +104,17 @@ export default function CheckoutSuccessPage() {
           <p className="text-gray-600 mb-6">Thank you for your purchase</p>
           
           {order && (
-            <div className="bg-gray-50 rounded-lg p-4 mb-6">
-              <p className="text-sm text-gray-600 mb-1">Order Number</p>
-              <p className="text-xl font-bold text-primary">{order.order_number}</p>
+            <div className="bg-gray-50 rounded-lg p-4 mb-6 space-y-3">
+              <div>
+                <p className="text-sm text-gray-600 mb-1">Order Number</p>
+                <p className="text-xl font-bold text-primary">{order.order_number}</p>
+              </div>
+              {order.invoice && (
+                <div>
+                  <p className="text-sm text-gray-600 mb-1">Invoice Number</p>
+                  <p className="text-lg font-semibold text-gray-900">{order.invoice.invoice_number}</p>
+                </div>
+              )}
             </div>
           )}
           
@@ -126,8 +134,12 @@ export default function CheckoutSuccessPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
               </svg>
               <div>
-                <p className="font-semibold text-gray-900">Confirmation email sent</p>
-                <p className="text-sm text-gray-600">Check your email for order details</p>
+                <p className="font-semibold text-gray-900">Invoice email sent</p>
+                <p className="text-sm text-gray-600">
+                  {order?.invoice?.email_sent 
+                    ? "Invoice PDF has been sent to your email" 
+                    : "Check your email for order details"}
+                </p>
               </div>
             </div>
             
@@ -143,6 +155,16 @@ export default function CheckoutSuccessPage() {
           </div>
 
           <div className="flex flex-col sm:flex-row gap-4">
+            {order?.invoice?.pdf_path && (
+              <a
+                href={`http://localhost:3000${order.invoice.pdf_path}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors text-center"
+              >
+                View Invoice PDF
+              </a>
+            )}
             <Link
               to="/profile"
               className="flex-1 px-6 py-3 bg-primary text-white font-semibold rounded-lg hover:bg-primary-dark transition-colors text-center"
@@ -158,6 +180,71 @@ export default function CheckoutSuccessPage() {
           </div>
         </div>
 
+        {/* Invoice Section */}
+        {(order?.invoice || order?.invoice_path) && (
+          <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Your Invoice</h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  {order.invoice?.invoice_number && `Invoice #${order.invoice.invoice_number} • `}
+                  Total: ${order.total_amount?.toFixed(2)}
+                </p>
+              </div>
+              {(order.invoice?.pdf_path || order.invoice_path) && (
+                <a
+                  href={`http://localhost:3000${order.invoice?.pdf_path || order.invoice_path}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-6 py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition-colors"
+                >
+                  View Invoice PDF
+                </a>
+              )}
+            </div>
+            <div className="border-2 border-gray-200 rounded-lg overflow-hidden bg-gray-50">
+              {(order.invoice?.pdf_path || order.invoice_path) ? (
+                <iframe
+                  src={`http://localhost:3000${order.invoice?.pdf_path || order.invoice_path}`}
+                  className="w-full"
+                  style={{ height: '700px' }}
+                  title="Invoice PDF"
+                />
+              ) : (
+                <div className="p-8 text-center text-gray-500">
+                  <p>Invoice PDF is being generated. Please refresh the page in a moment.</p>
+                </div>
+              )}
+            </div>
+            <div className="mt-4 text-center text-sm text-gray-600">
+              <p>Your invoice has been sent to your email. Click "View Invoice PDF" to view or download it.</p>
+            </div>
+          </div>
+        )}
+
+        {/* Invoice Details */}
+        {order?.invoice && (
+          <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Invoice Information</h2>
+            <div className="space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-gray-600">Invoice Number:</span>
+                <span className="font-semibold text-gray-900">{order.invoice.invoice_number}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-600">Total Amount:</span>
+                <span className="font-bold text-primary text-lg">${order.total_amount?.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-600">Email Status:</span>
+                <span className={`font-semibold ${order.invoice.email_sent ? 'text-green-600' : 'text-yellow-600'}`}>
+                  {order.invoice.email_sent ? 'Sent' : 'Pending'}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* What's Next */}
         <div className="bg-white rounded-xl shadow-sm p-6">
           <h2 className="text-xl font-bold text-gray-900 mb-4">What's Next?</h2>
@@ -165,18 +252,22 @@ export default function CheckoutSuccessPage() {
           <div className="space-y-4 text-sm text-gray-600">
             <div className="flex items-start gap-3">
               <span className="flex-shrink-0 w-6 h-6 bg-primary text-white rounded-full flex items-center justify-center text-xs font-bold">1</span>
-              <p>We'll process your order and prepare it for shipment</p>
+              <p>Your invoice has been generated and sent to your email</p>
             </div>
             <div className="flex items-start gap-3">
               <span className="flex-shrink-0 w-6 h-6 bg-primary text-white rounded-full flex items-center justify-center text-xs font-bold">2</span>
-              <p>You'll receive tracking information via email once shipped</p>
+              <p>We'll process your order and prepare it for shipment</p>
             </div>
             <div className="flex items-start gap-3">
               <span className="flex-shrink-0 w-6 h-6 bg-primary text-white rounded-full flex items-center justify-center text-xs font-bold">3</span>
-              <p>Track your order status anytime from your profile page</p>
+              <p>You'll receive tracking information via email once shipped</p>
             </div>
             <div className="flex items-start gap-3">
               <span className="flex-shrink-0 w-6 h-6 bg-primary text-white rounded-full flex items-center justify-center text-xs font-bold">4</span>
+              <p>Track your order status anytime from your profile page</p>
+            </div>
+            <div className="flex items-start gap-3">
+              <span className="flex-shrink-0 w-6 h-6 bg-primary text-white rounded-full flex items-center justify-center text-xs font-bold">5</span>
               <p>After delivery, you can leave a review for your purchased products</p>
             </div>
           </div>
@@ -185,4 +276,3 @@ export default function CheckoutSuccessPage() {
     </div>
   );
 }
-
