@@ -367,6 +367,18 @@ export default function ProfilePage() {
 
                     {/* Order Actions */}
                     <div className="flex flex-wrap gap-3 pt-4 border-t border-gray-200">
+                      {/* View Invoice Button */}
+                      {(order.invoice_path || order.invoice?.pdf_path) && (
+                        <a
+                          href={`http://localhost:3000${order.invoice?.pdf_path || order.invoice_path}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition-colors"
+                        >
+                          View Invoice PDF
+                        </a>
+                      )}
+                      
                       {order.status === 'processing' && (
                         <button
                           onClick={() => handleCancelOrder(order._id)}
