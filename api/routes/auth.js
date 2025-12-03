@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const Users = require('../db/models/Users');
+const Cart = require('../db/models/Cart');
 const { ValidationError, UnauthorizedError } = require('../lib/Error');
 const { generateToken, authenticate } = require('../lib/auth');
 const bcrypt = require('bcryptjs');
@@ -47,6 +48,18 @@ router.post('/login', async (req, res, next) => {
 
         // Generate JWT token
         const token = generateToken(user._id.toString());
+
+        // Merge guest cart with user cart if session exists
+        const sessionId = req.cookies?.sessionId || req.body?.sessionId;
+        if (sessionId) {
+            try {
+                await Cart.mergeCarts(sessionId, user._id);
+                console.log('Cart merged for user:', user._id);
+            } catch (cartError) {
+                console.error('Error merging cart on login:', cartError);
+                // Don't fail login if cart merge fails
+            }
+        }
 
         // Return user data (without password) and token
         const userData = await Users.findById(user._id).select('-password');
