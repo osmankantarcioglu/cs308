@@ -5,10 +5,14 @@ const Cart = require('../db/models/Cart');
 const Product = require('../db/models/Product');
 const Refund = require('../db/models/Refund');
 const Delivery = require('../db/models/Delivery');
+const Invoice = require('../db/models/Invoice');
+const Users = require('../db/models/Users');
 const { authenticate } = require('../lib/auth');
 const { NotFoundError, ValidationError } = require('../lib/Error');
 const Enum = require('../config/Enum');
 const { requireAdminOrProductManager } = require('../lib/middleware');
+const { generateInvoicePDF } = require('../services/invoiceService');
+const { sendInvoiceEmail } = require('../services/emailService');
 
 // Initialize Stripe only if API key is provided
 let stripe = null;
@@ -317,6 +321,70 @@ router.post('/complete-order', authenticate, async function(req, res, next) {
         
         console.log('Order created:', order.order_number);
 
+        // Populate order with customer and items for invoice generation
+        await order.populate('customer_id');
+        await order.populate('items.product_id');
+
+        // Generate invoice
+        let invoice = null;
+        let invoicePdfPath = null;
+        try {
+            // Generate invoice number
+            const invoiceNumber = `INV-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+            
+            // Create invoice document
+            invoice = new Invoice({
+                invoice_number: invoiceNumber,
+                order_id: order._id,
+                customer_id: userId,
+                items: order.items.map(item => ({
+                    product_id: item.product_id._id,
+                    name: item.product_id.name,
+                    quantity: item.quantity,
+                    unit_price: item.price_at_time,
+                    total_price: item.total_price
+                })),
+                subtotal: subtotal,
+                discount_amount: 0,
+                tax: tax,
+                total_amount: total,
+                customer_details: {
+                    name: `${order.customer_id.first_name} ${order.customer_id.last_name}`,
+                    email: order.customer_id.email,
+                    address: order.delivery_address
+                },
+                invoice_date: new Date(),
+                payment_method: 'stripe',
+                billing_address: order.delivery_address
+            });
+
+            // Generate PDF invoice
+            invoicePdfPath = await generateInvoicePDF(order, invoice);
+            invoice.pdf_path = invoicePdfPath;
+            
+            await invoice.save();
+            console.log('Invoice created:', invoice.invoice_number);
+
+            // Update order with invoice path
+            order.invoice_path = invoicePdfPath;
+            await order.save();
+
+            // Send invoice email
+            try {
+                await sendInvoiceEmail(invoice, order, order.customer_id);
+                invoice.email_sent = true;
+                invoice.email_sent_at = new Date();
+                await invoice.save();
+                console.log('Invoice email sent to:', order.customer_id.email);
+            } catch (emailError) {
+                console.error('Failed to send invoice email:', emailError);
+                // Don't fail the order if email fails
+            }
+        } catch (invoiceError) {
+            console.error('Error generating invoice:', invoiceError);
+            // Don't fail the order if invoice generation fails
+        }
+
         // Create delivery tasks for each order item
         if (orderItems.length > 0) {
             const deliveryPayload = orderItems.map((item) => ({
@@ -363,10 +431,31 @@ router.post('/complete-order', authenticate, async function(req, res, next) {
             console.log('Cart cleared by session_id:', cart.session_id, 'Modified:', result3.modifiedCount);
         }
         
+        // Populate order again with invoice info
+        const orderWithInvoice = await Order.findById(order._id)
+            .populate('items.product_id')
+            .populate('customer_id', 'first_name last_name email');
+        
+        // Use invoice pdf_path or fallback to order invoice_path
+        const pdfPath = invoice?.pdf_path || orderWithInvoice.invoice_path;
+        
+        const responseData = {
+            ...orderWithInvoice.toObject(),
+            invoice: invoice ? {
+                invoice_number: invoice.invoice_number,
+                pdf_path: pdfPath,
+                email_sent: invoice.email_sent
+            } : (orderWithInvoice.invoice_path ? {
+                invoice_number: null,
+                pdf_path: orderWithInvoice.invoice_path,
+                email_sent: false
+            } : null)
+        };
+
         res.json({
             success: true,
             message: 'Order created successfully',
-            data: order
+            data: responseData
         });
     } catch (error) {
         next(error);
@@ -383,9 +472,35 @@ router.get('/', authenticate, async function(req, res, next) {
         const orders = await Order.findByCustomer(userId)
             .populate('items.product_id');
         
+        // Fetch invoice information for each order
+        const ordersWithInvoices = await Promise.all(
+            orders.map(async (order) => {
+                const orderObj = order.toObject();
+                
+                // Try to find invoice for this order
+                const invoice = await Invoice.findByOrder(order._id);
+                if (invoice) {
+                    orderObj.invoice = {
+                        invoice_number: invoice.invoice_number,
+                        pdf_path: invoice.pdf_path,
+                        email_sent: invoice.email_sent
+                    };
+                } else if (order.invoice_path) {
+                    // Fallback to order's invoice_path if invoice document doesn't exist
+                    orderObj.invoice = {
+                        invoice_number: null,
+                        pdf_path: order.invoice_path,
+                        email_sent: false
+                    };
+                }
+                
+                return orderObj;
+            })
+        );
+        
         res.json({
             success: true,
-            data: orders
+            data: ordersWithInvoices
         });
     } catch (error) {
         next(error);
@@ -734,5 +849,144 @@ router.post('/:id/refund', authenticate, async function(req, res, next) {
     }
 });
 
-module.exports = router;
+/**
+ * @route   GET /orders/:id/invoice
+ * @desc    Get invoice for an order
+ */
+router.get('/:id/invoice', authenticate, async function(req, res, next) {
+    try {
+        const order = await Order.findById(req.params.id)
+            .populate('customer_id', 'first_name last_name email');
+        
+        if (!order) {
+            throw new NotFoundError('Order not found');
+        }
+        
+        // Verify user owns this order or is admin/product manager
+        const isOwner = order.customer_id._id.toString() === req.user._id.toString();
+        const isAdminOrManager = req.user.role === Enum.USER_ROLES.ADMIN || 
+                                 req.user.role === Enum.USER_ROLES.PRODUCT_MANAGER;
+        
+        if (!isOwner && !isAdminOrManager) {
+            throw new ValidationError('You can only view invoices for your own orders');
+        }
+        
+        const invoice = await Invoice.findByOrder(order._id);
+        
+        if (!invoice) {
+            throw new NotFoundError('Invoice not found for this order');
+        }
+        
+        res.json({
+            success: true,
+            data: invoice
+        });
+    } catch (error) {
+        if (error.name === 'CastError') {
+            next(new NotFoundError('Invalid order ID'));
+        } else {
+            next(error);
+        }
+    }
+});
 
+/**
+ * @route   GET /orders/invoice/:invoiceId/pdf
+ * @desc    Download invoice PDF
+ */
+router.get('/invoice/:invoiceId/pdf', authenticate, async function(req, res, next) {
+    try {
+        const invoice = await Invoice.findById(req.params.invoiceId)
+            .populate('order_id')
+            .populate('customer_id', 'first_name last_name email');
+        
+        if (!invoice) {
+            throw new NotFoundError('Invoice not found');
+        }
+        
+        // Verify user owns this invoice or is admin/product manager
+        const isOwner = invoice.customer_id._id.toString() === req.user._id.toString();
+        const isAdminOrManager = req.user.role === Enum.USER_ROLES.ADMIN || 
+                                 req.user.role === Enum.USER_ROLES.PRODUCT_MANAGER;
+        
+        if (!isOwner && !isAdminOrManager) {
+            throw new ValidationError('You can only view invoices for your own orders');
+        }
+        
+        if (!invoice.pdf_path) {
+            throw new NotFoundError('Invoice PDF not found');
+        }
+        
+        const path = require('path');
+        const fs = require('fs');
+        const pdfPath = path.join(__dirname, '..', 'public', invoice.pdf_path);
+        
+        if (!fs.existsSync(pdfPath)) {
+            throw new NotFoundError('Invoice PDF file not found');
+        }
+        
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `inline; filename="invoice-${invoice.invoice_number}.pdf"`);
+        res.sendFile(pdfPath);
+    } catch (error) {
+        if (error.name === 'CastError') {
+            next(new NotFoundError('Invalid invoice ID'));
+        } else {
+            next(error);
+        }
+    }
+});
+
+/**
+ * @route   GET /orders/management/invoices
+ * @desc    Get all invoices for product managers
+ * @access  Admin & Product Manager
+ */
+router.get('/management/invoices', authenticate, requireAdminOrProductManager, async function(req, res, next) {
+    try {
+        const { page = 1, limit = 20, search = '' } = req.query;
+        
+        const pageNum = Math.max(1, parseInt(page, 10) || 1);
+        const limitNum = Math.min(50, Math.max(1, parseInt(limit, 10) || 20));
+        const skip = (pageNum - 1) * limitNum;
+        
+        const query = {};
+        
+        if (search) {
+            const searchRegex = new RegExp(search, 'i');
+            query.$or = [
+                { invoice_number: searchRegex },
+                { 'customer_details.name': searchRegex },
+                { 'customer_details.email': searchRegex }
+            ];
+        }
+        
+        const [invoices, total] = await Promise.all([
+            Invoice.find(query)
+                .populate('order_id', 'order_number status')
+                .populate('customer_id', 'first_name last_name email')
+                .sort({ invoice_date: -1 })
+                .skip(skip)
+                .limit(limitNum)
+                .lean(),
+            Invoice.countDocuments(query)
+        ]);
+        
+        res.json({
+            success: true,
+            data: {
+                invoices,
+                pagination: {
+                    page: pageNum,
+                    limit: limitNum,
+                    total,
+                    pages: Math.ceil(total / limitNum)
+                }
+            }
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
+module.exports = router;
