@@ -18,14 +18,14 @@ export default function ProfilePage() {
         setLoading(false);
         return;
       }
-      
+     
       try {
         const response = await fetch(API_BASE_URL, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
         });
-        
+       
         if (response.ok) {
           const data = await response.json();
           if (data.success) {
@@ -38,7 +38,7 @@ export default function ProfilePage() {
         setLoading(false);
       }
     };
-    
+   
     fetchOrders();
   }, [isAuthenticated, token]);
 
@@ -46,7 +46,7 @@ export default function ProfilePage() {
     if (!window.confirm('Are you sure you want to cancel this order?')) {
       return;
     }
-    
+   
     try {
       const response = await fetch(`${API_BASE_URL}/${orderId}/cancel`, {
         method: 'POST',
@@ -54,7 +54,7 @@ export default function ProfilePage() {
           'Authorization': `Bearer ${token}`
         }
       });
-      
+     
       if (response.ok) {
         alert('Order cancelled successfully');
         // Refresh orders
@@ -77,7 +77,7 @@ export default function ProfilePage() {
   const handleRequestRefund = async (orderId) => {
     const reason = prompt('Please provide a reason for the refund:');
     if (!reason) return;
-    
+   
     try {
       const response = await fetch(`${API_BASE_URL}/${orderId}/refund`, {
         method: 'POST',
@@ -87,7 +87,7 @@ export default function ProfilePage() {
         },
         body: JSON.stringify({ reason })
       });
-      
+     
       if (response.ok) {
         alert('Refund request submitted successfully');
         setOrders((prev) =>
@@ -196,7 +196,7 @@ export default function ProfilePage() {
         {activeTab === 'profile' && (
           <div className="bg-white rounded-xl shadow-sm p-6">
             <h2 className="text-2xl font-bold text-gray-900 mb-6">Profile Information</h2>
-          
+         
           <div className="grid md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">First Name</label>
@@ -347,7 +347,7 @@ export default function ProfilePage() {
                               )}
                             </div>
                             <div className="flex-1">
-                              <Link 
+                              <Link
                                 to={`/products/${item.product_id?._id}`}
                                 className="font-semibold text-gray-900 hover:text-primary transition-colors"
                               >
@@ -367,6 +367,18 @@ export default function ProfilePage() {
 
                     {/* Order Actions */}
                     <div className="flex flex-wrap gap-3 pt-4 border-t border-gray-200">
+                      {/* View Invoice Button */}
+                      {(order.invoice_path || order.invoice?.pdf_path) && (
+                        <a
+                          href={`http://localhost:3000${order.invoice?.pdf_path || order.invoice_path}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition-colors"
+                        >
+                          View Invoice PDF
+                        </a>
+                      )}
+                     
                       {order.status === 'processing' && (
                         <button
                           onClick={() => handleCancelOrder(order._id)}
@@ -375,7 +387,7 @@ export default function ProfilePage() {
                           Cancel Order
                         </button>
                       )}
-                      
+                     
                       {order.status === 'delivered' && (
                         <>
                           {order.refundRequested ? (
@@ -401,7 +413,7 @@ export default function ProfilePage() {
                           ))}
                         </>
                       )}
-                      
+                     
                       {order.status === 'in-transit' && (
                         <div className="flex items-center gap-2 text-blue-600">
                           <svg className="w-5 h-5 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -421,4 +433,3 @@ export default function ProfilePage() {
     </div>
   );
 }
-
