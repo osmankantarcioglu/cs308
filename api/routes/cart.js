@@ -3,6 +3,7 @@ var router = express.Router();
 const Cart = require('../db/models/Cart');
 const Product = require('../db/models/Product');
 const { NotFoundError, ValidationError } = require('../lib/Error');
+const { optionalAuthenticate } = require('../lib/auth');
 
 // Middleware to get session ID (for now, we'll use a simple session generator)
 function getSessionId(req, res, next) {
@@ -30,9 +31,9 @@ function getSessionId(req, res, next) {
  * @route   GET /cart
  * @desc    Get cart items
  */
-router.get('/', getSessionId, async function(req, res, next) {
+router.get('/', getSessionId, optionalAuthenticate, async function(req, res, next) {
     try {
-        const userId = req.user?.id; // Will be set by auth middleware later
+        const userId = req.user?._id; // User ID from optional auth
         
         const cart = userId 
             ? await Cart.findByUser(userId)
@@ -81,10 +82,10 @@ router.get('/', getSessionId, async function(req, res, next) {
  * @desc    Add item to cart
  * @body    { productId, quantity }
  */
-router.post('/add', getSessionId, async function(req, res, next) {
+router.post('/add', getSessionId, optionalAuthenticate, async function(req, res, next) {
     try {
         const { productId, quantity = 1 } = req.body;
-        const userId = req.user?.id; // Will be set by auth middleware later
+        const userId = req.user?._id; // User ID from optional auth
         
         if (!productId) {
             throw new ValidationError('Product ID is required');
@@ -133,11 +134,11 @@ router.post('/add', getSessionId, async function(req, res, next) {
  * @desc    Update item quantity in cart
  * @body    { quantity }
  */
-router.put('/update/:productId', getSessionId, async function(req, res, next) {
+router.put('/update/:productId', getSessionId, optionalAuthenticate, async function(req, res, next) {
     try {
         const { productId } = req.params;
         const { quantity } = req.body;
-        const userId = req.user?.id; // Will be set by auth middleware later
+        const userId = req.user?._id; // User ID from optional auth
         
         if (!quantity || quantity < 1) {
             throw new ValidationError('Quantity must be at least 1');
@@ -183,10 +184,10 @@ router.put('/update/:productId', getSessionId, async function(req, res, next) {
  * @route   DELETE /cart/remove/:productId
  * @desc    Remove item from cart
  */
-router.delete('/remove/:productId', getSessionId, async function(req, res, next) {
+router.delete('/remove/:productId', getSessionId, optionalAuthenticate, async function(req, res, next) {
     try {
         const { productId } = req.params;
-        const userId = req.user?.id; // Will be set by auth middleware later
+        const userId = req.user?._id; // User ID from optional auth
         
         const updatedCart = await Cart.removeItemFromCart(
             req.sessionId,
@@ -216,9 +217,9 @@ router.delete('/remove/:productId', getSessionId, async function(req, res, next)
  * @route   DELETE /cart/clear
  * @desc    Clear all items from cart
  */
-router.delete('/clear', getSessionId, async function(req, res, next) {
+router.delete('/clear', getSessionId, optionalAuthenticate, async function(req, res, next) {
     try {
-        const userId = req.user?.id; // Will be set by auth middleware later
+        const userId = req.user?._id; // User ID from optional auth
         
         const updatedCart = await Cart.clearCart(req.sessionId, userId);
         
@@ -237,4 +238,3 @@ router.delete('/clear', getSessionId, async function(req, res, next) {
 });
 
 module.exports = router;
-
