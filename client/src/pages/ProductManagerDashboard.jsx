@@ -94,6 +94,14 @@ export default function ProductManagerDashboard() {
   const [reviewStatus, setReviewStatus] = useState("pending");
   const [reviewsLoading, setReviewsLoading] = useState(true);
 
+  // Invoices
+  const [invoices, setInvoices] = useState([]);
+  const [invoicePagination, setInvoicePagination] = useState({ page: 1, pages: 1, total: 0 });
+  const [invoiceSearch, setInvoiceSearch] = useState("");
+  const [debouncedInvoiceSearch, setDebouncedInvoiceSearch] = useState("");
+  const [invoicePage, setInvoicePage] = useState(1);
+  const [invoicesLoading, setInvoicesLoading] = useState(true);
+
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
@@ -130,6 +138,11 @@ export default function ProductManagerDashboard() {
     return () => clearTimeout(timeout);
   }, [deliverySearch]);
 
+  useEffect(() => {
+    const timeout = setTimeout(() => setDebouncedInvoiceSearch(invoiceSearch), 400);
+    return () => clearTimeout(timeout);
+  }, [invoiceSearch]);
+
   // Reset pagination when filters change
   useEffect(() => {
     setOrderPage(1);
@@ -142,6 +155,10 @@ export default function ProductManagerDashboard() {
   useEffect(() => {
     setDeliveryPage(1);
   }, [deliveryStatus, debouncedDeliverySearch]);
+
+  useEffect(() => {
+    setInvoicePage(1);
+  }, [debouncedInvoiceSearch]);
 
   const fetchOverview = async () => {
     if (!token) return;
@@ -269,6 +286,30 @@ export default function ProductManagerDashboard() {
     }
   };
 
+  const fetchInvoices = async (searchValue, pageValue) => {
+    if (!token) return;
+    setInvoicesLoading(true);
+    try {
+      const params = new URLSearchParams({
+        search: searchValue,
+        page: String(pageValue),
+        limit: "20",
+      });
+      const response = await authenticatedFetch(`${MANAGEMENT_BASE}/invoices?${params.toString()}`);
+      if (!response) return;
+      if (!response.ok) throw new Error("Failed to load invoices");
+      const data = await response.json();
+      if (data.success) {
+        setInvoices(data.data.invoices);
+        setInvoicePagination(data.data.pagination);
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setInvoicesLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (!token) return;
     fetchOverview();
@@ -294,6 +335,11 @@ export default function ProductManagerDashboard() {
     if (!token) return;
     fetchReviews(reviewStatus);
   }, [token, reviewStatus]);
+
+  useEffect(() => {
+    if (!token) return;
+    fetchInvoices(debouncedInvoiceSearch, invoicePage);
+  }, [token, debouncedInvoiceSearch, invoicePage]);
 
   const handleOrderStatusChange = async (orderId, nextStatus) => {
     if (!nextStatus) return;
@@ -746,9 +792,9 @@ export default function ProductManagerDashboard() {
                       <span className="text-slate-500">
                         {new Date(invoice.order_date).toLocaleDateString()}
                       </span>
-                      {invoice.invoice_path ? (
+                      {invoice.invoice_path || invoice.pdf_path ? (
                         <a
-                          href={invoice.invoice_path}
+                          href={`http://localhost:3000${invoice.invoice_path || invoice.pdf_path}`}
                           className="text-indigo-300 hover:text-indigo-200 font-semibold"
                           target="_blank"
                           rel="noreferrer"
@@ -1060,6 +1106,121 @@ export default function ProductManagerDashboard() {
           </div>
         </section>
 
+        {/* Invoices Management */}
+        <section className="bg-slate-900/80 rounded-3xl p-6 ring-1 ring-white/5 space-y-5">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h2 className="text-white text-2xl font-semibold">Invoice Management</h2>
+              <p className="text-slate-400 text-sm">View and manage all customer invoices</p>
+            </div>
+            <input
+              type="text"
+              placeholder="Search invoice #, customer name, or email"
+              className="bg-slate-800 text-slate-200 px-4 py-2 rounded-2xl border border-white/5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              value={invoiceSearch}
+              onChange={(e) => setInvoiceSearch(e.target.value)}
+            />
+          </div>
+
+          {invoicesLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-10 w-10 border-t-4 border-b-4 border-indigo-500"></div>
+            </div>
+          ) : invoices.length === 0 ? (
+            <div className="text-center py-12 text-slate-500">No invoices found.</div>
+          ) : (
+            <div className="space-y-4">
+              {invoices.map((invoice) => (
+                <div
+                  key={invoice._id}
+                  className="bg-slate-900 rounded-2xl p-5 border border-white/5 hover:border-indigo-500/40 transition"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <p className="text-lg font-semibold text-white">{invoice.invoice_number}</p>
+                        {invoice.order_id && (
+                          <span className="text-sm text-slate-400">Order: {invoice.order_id.order_number}</span>
+                        )}
+                      </div>
+                      <p className="text-sm text-slate-400 mb-2">
+                        {invoice.customer_id?.first_name} {invoice.customer_id?.last_name} · {invoice.customer_id?.email}
+                      </p>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-slate-300">
+                        <div>
+                          <p className="text-slate-500 text-xs uppercase tracking-widest mb-1">Total Amount</p>
+                          <p className="font-semibold text-white">${invoice.total_amount?.toFixed(2)}</p>
+                        </div>
+                        <div>
+                          <p className="text-slate-500 text-xs uppercase tracking-widest mb-1">Date</p>
+                          <p>{new Date(invoice.invoice_date).toLocaleDateString()}</p>
+                        </div>
+                        <div>
+                          <p className="text-slate-500 text-xs uppercase tracking-widest mb-1">Email Status</p>
+                          <p className={invoice.email_sent ? "text-emerald-300" : "text-amber-300"}>
+                            {invoice.email_sent ? "Sent" : "Pending"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-slate-500 text-xs uppercase tracking-widest mb-1">Order Status</p>
+                          <span className={`px-2 py-1 rounded-full text-xs ${STATUS_STYLES[invoice.order_id?.status] || STATUS_STYLES.processing}`}>
+                            {invoice.order_id?.status?.replace("-", " ") || "N/A"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      {invoice.pdf_path && (
+                        <>
+                          <a
+                            href={`http://localhost:3000${invoice.pdf_path}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-4 py-2 rounded-xl bg-indigo-500/20 text-indigo-200 hover:bg-indigo-500/30 transition text-sm font-semibold text-center"
+                          >
+                            View PDF
+                          </a>
+                          <a
+                            href={`http://localhost:3000${invoice.pdf_path}`}
+                            download
+                            className="px-4 py-2 rounded-xl bg-emerald-500/20 text-emerald-200 hover:bg-emerald-500/30 transition text-sm font-semibold text-center"
+                          >
+                            Download PDF
+                          </a>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {invoicePagination.pages > 1 && (
+            <div className="flex items-center justify-between mt-6 text-slate-400 text-sm">
+              <span>
+                Page {invoicePagination.page} of {invoicePagination.pages} • {invoicePagination.total} invoices
+              </span>
+              <div className="space-x-2">
+                <button
+                  onClick={() => setInvoicePage((p) => Math.max(1, p - 1))}
+                  disabled={invoicePagination.page === 1}
+                  className="px-3 py-1 rounded-xl bg-slate-800 text-white disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Prev
+                </button>
+                <button
+                  onClick={() => setInvoicePage((p) => Math.min(invoicePagination.pages, p + 1))}
+                  disabled={invoicePagination.page === invoicePagination.pages}
+                  className="px-3 py-1 rounded-xl bg-slate-800 text-white disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
+        </section>
+
         {/* Review moderation */}
         <section className="bg-slate-900/80 rounded-3xl p-6 ring-1 ring-white/5 space-y-5">
           <div className="flex flex-wrap items-center justify-between gap-4">
@@ -1127,4 +1288,3 @@ export default function ProductManagerDashboard() {
     </div>
   );
 }
-
