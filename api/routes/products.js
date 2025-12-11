@@ -655,8 +655,18 @@ router.post('/:id/reviews', authenticate, async function(req, res, next) {
             review.updated_by = req.user._id;
             await review.save();
         } else {
-            // If no review exists, require a rating first
-            throw new ValidationError('Please submit a rating first before adding a comment.');
+            // Create a new review with just a comment (rating is optional)
+            review = await Review.create({
+                product_id: req.params.id,
+                customer_id: req.user._id,
+                order_id: deliveryCheck.order ? deliveryCheck.order._id : undefined,
+                comment: trimmedComment,
+                comment_status: Enum.REVIEW_STATUS.PENDING, // Comment needs approval
+                status: Enum.REVIEW_STATUS.PENDING, // For backward compatibility
+                is_visible: false, // Comment not visible until approved
+                created_by: req.user._id,
+                updated_by: req.user._id
+            });
         }
 
         res.status(201).json({

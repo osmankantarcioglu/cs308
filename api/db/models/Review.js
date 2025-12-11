@@ -19,7 +19,7 @@ const schema = mongoose.Schema({
     },
     rating: {
         type: Number,
-        required: true,
+        required: false,
         min: 1,
         max: 5  // Only 1-5 star ratings
     },
@@ -154,9 +154,9 @@ class Review extends mongoose.Model {
     }
 
     static getAverageRating(productId) {
-        // Calculate average from all ratings (ratings are always visible)
+        // Calculate average from all ratings (only count reviews that have ratings)
         return this.aggregate([
-            { $match: { product_id: productId } },
+            { $match: { product_id: productId, rating: { $exists: true, $ne: null } } },
             { $group: { _id: null, averageRating: { $avg: "$rating" } } }
         ]);
     }
