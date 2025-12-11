@@ -7,6 +7,8 @@ import HeroSection from "./components/HeroSection";
 import Categories from "./components/Categories";
 import FeaturedProducts from "./components/FeaturedProducts";
 import DealsSection from "./components/DealsSection";
+import ProductProperties from "./components/ProductProperties";
+import ProductComments from "./components/ProductComments";
 import Footer from "./components/Footer";
 import BasketPage from "./pages/BasketPage";
 import ProductsPage from "./pages/ProductsPage";
@@ -48,6 +50,8 @@ export default function App() {
                 <HeroSection />
                 <Categories />
                 <FeaturedProducts />
+                <ProductProperties />
+                <ProductComments />
                 <DealsSection />
               </main>
             }
