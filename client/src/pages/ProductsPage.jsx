@@ -20,8 +20,6 @@ export default function ProductsPage() {
   const [sortBy, setSortBy] = useState(""); // "price_asc", "price_desc", "popularity"
   const { isAuthenticated } = useAuth();
   const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
-  const filterSelectClasses =
-    "w-full px-4 py-3 pr-12 text-sm border border-gray-300 rounded-full bg-white appearance-none shadow-sm focus:ring-2 focus:ring-primary focus:border-transparent transition-colors";
   
   // Update search term and category when URL changes (from Navbar)
   useEffect(() => {
@@ -219,13 +217,13 @@ export default function ProductsPage() {
           </div>
 
           {/* Category Filter */}
-          <div className="md:w-64 relative">
+          <div className="md:w-64">
             <select
               value={selectedCategory}
               onChange={(e) => {
                 setSelectedCategory(e.target.value);
               }}
-              className={filterSelectClasses}
+              className="w-full px-4 py-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent bg-white"
             >
               <option value="">All Categories</option>
               {categories.map((category) => (
@@ -234,36 +232,20 @@ export default function ProductsPage() {
                 </option>
               ))}
             </select>
-            <svg
-              className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
           </div>
 
           {/* Sort Dropdown */}
-          <div className="md:w-64 relative">
+          <div className="md:w-64">
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
-              className={filterSelectClasses}
+              className="w-full px-4 py-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent bg-white"
             >
               <option value="">Sort by...</option>
               <option value="price_asc">Price: Low to High</option>
               <option value="price_desc">Price: High to Low</option>
               <option value="popularity">Popularity</option>
             </select>
-            <svg
-              className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
           </div>
         </div>
 
