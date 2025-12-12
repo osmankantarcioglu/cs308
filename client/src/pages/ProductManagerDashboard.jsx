@@ -72,6 +72,10 @@ export default function ProductManagerDashboard() {
     category: "",
     is_active: true,
     image: "",
+    model: "",
+    serial_number: "",
+    warranty_status: "",
+    distributor: "",
   });
   const [newCategoryForm, setNewCategoryForm] = useState({
     name: "",
@@ -436,6 +440,18 @@ export default function ProductManagerDashboard() {
       if (newProductForm.image) {
         payload.images = [newProductForm.image];
       }
+      if (newProductForm.model) {
+        payload.model = newProductForm.model;
+      }
+      if (newProductForm.serial_number) {
+        payload.serial_number = newProductForm.serial_number;
+      }
+      if (newProductForm.warranty_status) {
+        payload.warranty_status = newProductForm.warranty_status;
+      }
+      if (newProductForm.distributor) {
+        payload.distributor = newProductForm.distributor;
+      }
       const response = await authenticatedFetch(`${PRODUCTS_BASE}`, {
         method: "POST",
         body: JSON.stringify(payload),
@@ -453,6 +469,10 @@ export default function ProductManagerDashboard() {
         category: "",
         is_active: true,
         image: "",
+        model: "",
+        serial_number: "",
+        warranty_status: "",
+        distributor: "",
       });
       await fetchInventory(inventoryStatus, debouncedInventorySearch, 1);
       setSuccess("Product created");
@@ -1023,6 +1043,34 @@ export default function ProductManagerDashboard() {
                 className="w-full bg-slate-900/60 border border-white/5 rounded-2xl px-4 py-3 text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                 value={newProductForm.image}
                 onChange={(e) => setNewProductForm({ ...newProductForm, image: e.target.value })}
+              />
+              <input
+                type="text"
+                placeholder="Model (optional)"
+                className="w-full bg-slate-900/60 border border-white/5 rounded-2xl px-4 py-3 text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                value={newProductForm.model}
+                onChange={(e) => setNewProductForm({ ...newProductForm, model: e.target.value })}
+              />
+              <input
+                type="text"
+                placeholder="Serial Number (optional)"
+                className="w-full bg-slate-900/60 border border-white/5 rounded-2xl px-4 py-3 text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                value={newProductForm.serial_number}
+                onChange={(e) => setNewProductForm({ ...newProductForm, serial_number: e.target.value })}
+              />
+              <input
+                type="text"
+                placeholder="Warranty Status (optional, e.g., 1 Year, 2 Years)"
+                className="w-full bg-slate-900/60 border border-white/5 rounded-2xl px-4 py-3 text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                value={newProductForm.warranty_status}
+                onChange={(e) => setNewProductForm({ ...newProductForm, warranty_status: e.target.value })}
+              />
+              <input
+                type="text"
+                placeholder="Distributor (optional)"
+                className="w-full bg-slate-900/60 border border-white/5 rounded-2xl px-4 py-3 text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                value={newProductForm.distributor}
+                onChange={(e) => setNewProductForm({ ...newProductForm, distributor: e.target.value })}
               />
               <label className="flex items-center space-x-2 text-slate-300 text-sm">
                 <input

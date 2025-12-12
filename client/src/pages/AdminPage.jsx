@@ -111,6 +111,10 @@ export default function AdminPage() {
     cost: 0,
     category: "",
     is_active: true,
+    model: "",
+    serial_number: "",
+    warranty_status: "",
+    distributor: "",
   });
 
   useEffect(() => {
@@ -495,7 +499,7 @@ export default function AdminPage() {
 
       setSuccess("Product created successfully!");
       setShowAddProductModal(false);
-      setProductFormData({ name: "", description: "", quantity: 0, price: 0, cost: 0, category: "", is_active: true });
+      setProductFormData({ name: "", description: "", quantity: 0, price: 0, cost: 0, category: "", is_active: true, model: "", serial_number: "", warranty_status: "", distributor: "" });
       fetchProducts();
     } catch (err) {
       setError(err.message);
@@ -525,7 +529,7 @@ export default function AdminPage() {
       setSuccess("Product updated successfully!");
       setShowEditProductModal(false);
       setSelectedProduct(null);
-      setProductFormData({ name: "", description: "", quantity: 0, price: 0, cost: 0, category: "", is_active: true });
+      setProductFormData({ name: "", description: "", quantity: 0, price: 0, cost: 0, category: "", is_active: true, model: "", serial_number: "", warranty_status: "", distributor: "" });
       fetchProducts();
     } catch (err) {
       setError(err.message);
@@ -622,6 +626,10 @@ export default function AdminPage() {
       cost: product.cost || 0,
       category: product.category?._id || product.category || "",
       is_active: product.is_active !== undefined ? product.is_active : true,
+      model: product.model || "",
+      serial_number: product.serial_number || "",
+      warranty_status: product.warranty_status || "",
+      distributor: product.distributor || "",
     });
     setShowEditProductModal(true);
   };
@@ -2250,7 +2258,7 @@ export default function AdminPage() {
                         type="button"
                         onClick={() => {
                           setShowAddProductModal(false);
-                          setProductFormData({ name: "", description: "", quantity: 0, price: 0, cost: 0, category: "", is_active: true });
+                          setProductFormData({ name: "", description: "", quantity: 0, price: 0, cost: 0, category: "", is_active: true, model: "", serial_number: "", warranty_status: "", distributor: "" });
                         }}
                         className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
                       >
@@ -2355,6 +2363,59 @@ export default function AdminPage() {
                             ))}
                         </select>
                       </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Model
+                        </label>
+                        <input
+                          type="text"
+                          value={productFormData.model}
+                          onChange={(e) =>
+                            setProductFormData({ ...productFormData, model: e.target.value })
+                          }
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Serial Number
+                        </label>
+                        <input
+                          type="text"
+                          value={productFormData.serial_number}
+                          onChange={(e) =>
+                            setProductFormData({ ...productFormData, serial_number: e.target.value })
+                          }
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Warranty Status
+                        </label>
+                        <input
+                          type="text"
+                          value={productFormData.warranty_status}
+                          onChange={(e) =>
+                            setProductFormData({ ...productFormData, warranty_status: e.target.value })
+                          }
+                          placeholder="e.g., 1 Year, 2 Years, No Warranty"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Distributor
+                        </label>
+                        <input
+                          type="text"
+                          value={productFormData.distributor}
+                          onChange={(e) =>
+                            setProductFormData({ ...productFormData, distributor: e.target.value })
+                          }
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        />
+                      </div>
                       <div className="flex items-center">
                         <input
                           type="checkbox"
@@ -2373,7 +2434,7 @@ export default function AdminPage() {
                         onClick={() => {
                           setShowEditProductModal(false);
                           setSelectedProduct(null);
-                          setProductFormData({ name: "", description: "", quantity: 0, price: 0, cost: 0, category: "", is_active: true });
+                          setProductFormData({ name: "", description: "", quantity: 0, price: 0, cost: 0, category: "", is_active: true, model: "", serial_number: "", warranty_status: "", distributor: "" });
                         }}
                         className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
                       >

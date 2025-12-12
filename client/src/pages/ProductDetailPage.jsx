@@ -507,13 +507,58 @@ export default function ProductDetailPage() {
                   )}
                 </div>
 
-                {/* Description */}
-                {product.description && (
-                  <div className="mb-6">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Product Information</h3>
-                    <p className="text-gray-600 leading-relaxed">{product.description}</p>
+                {/* Product Details Section */}
+                <div className="mb-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Product Information</h3>
+                  
+                  {/* Description */}
+                  {product.description && (
+                    <div className="mb-4">
+                      <p className="text-gray-600 leading-relaxed">{product.description}</p>
+                    </div>
+                  )}
+
+                  {/* Product Details Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+                    {/* Product ID */}
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <div className="text-sm text-gray-600 mb-1">Product ID</div>
+                      <div className="text-base font-semibold text-gray-900">{product._id || product.id || "N/A"}</div>
+                    </div>
+
+                    {/* Model */}
+                    {product.model && (
+                      <div className="p-3 bg-gray-50 rounded-lg">
+                        <div className="text-sm text-gray-600 mb-1">Model</div>
+                        <div className="text-base font-semibold text-gray-900">{product.model}</div>
+                      </div>
+                    )}
+
+                    {/* Serial Number */}
+                    {product.serial_number && (
+                      <div className="p-3 bg-gray-50 rounded-lg">
+                        <div className="text-sm text-gray-600 mb-1">Serial Number</div>
+                        <div className="text-base font-semibold text-gray-900">{product.serial_number}</div>
+                      </div>
+                    )}
+
+                    {/* Warranty Status */}
+                    {product.warranty_status && (
+                      <div className="p-3 bg-gray-50 rounded-lg">
+                        <div className="text-sm text-gray-600 mb-1">Warranty Status</div>
+                        <div className="text-base font-semibold text-gray-900">{product.warranty_status}</div>
+                      </div>
+                    )}
+
+                    {/* Distributor */}
+                    {product.distributor && (
+                      <div className="p-3 bg-gray-50 rounded-lg">
+                        <div className="text-sm text-gray-600 mb-1">Distributor</div>
+                        <div className="text-base font-semibold text-gray-900">{product.distributor}</div>
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
 
                 {/* Quantity Selector & Add to Cart */}
                 <div className="border-t pt-6">
