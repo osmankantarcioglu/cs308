@@ -45,4 +45,37 @@ describe('Product Model - calculatePopularityScore Method', () => {
         expect(score).toBeGreaterThanOrEqual(0);
         expect(typeof score).toBe('number');
     });
+
+    // Test 51: calculatePopularityScore should handle old products correctly
+    test('calculatePopularityScore should not add bonus for products older than 30 days', () => {
+        const oldDate = new Date();
+        oldDate.setDate(oldDate.getDate() - 45); // 45 days ago
+        
+        const product = {
+            view_count: 100,
+            createdAt: oldDate
+        };
+        
+        const score = Product.calculatePopularityScore(product);
+        
+        // Should have view count calculation but no new product bonus
+        expect(score).toBeGreaterThanOrEqual(0);
+        expect(typeof score).toBe('number');
+        // Score should be less than if it was a new product (which would have +50 bonus)
+        expect(score).toBeLessThan(60); // 100 views * 0.1 = 10, no bonus
+    });
+
+    // Test 52: calculatePopularityScore should handle very high view counts
+    test('calculatePopularityScore should scale correctly with high view counts', () => {
+        const product = {
+            view_count: 10000,
+            createdAt: new Date()
+        };
+        
+        const score = Product.calculatePopularityScore(product);
+        
+        // With 10000 views: 10000 * 0.1 = 1000 (plus new product bonus if applicable)
+        expect(score).toBeGreaterThanOrEqual(1000);
+        expect(typeof score).toBe('number');
+    });
 });
