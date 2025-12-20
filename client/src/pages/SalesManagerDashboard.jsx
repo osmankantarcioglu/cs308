@@ -7,6 +7,7 @@ const PRODUCTS_BASE = `${API_BASE}/products`;
 const DISCOUNTS_BASE = `${API_BASE}/discounts`;
 const INVOICES_BASE = `${API_BASE}/orders/management/invoices`;
 const ANALYTICS_BASE = `${API_BASE}/sales/analytics`;
+const REFUNDS_BASE = `${API_BASE}/sales/refunds`;
 
 export default function SalesManagerDashboard() {
   const { token, user, logout } = useAuth();
@@ -14,6 +15,12 @@ export default function SalesManagerDashboard() {
 
   // State for tabs
   const [activeTab, setActiveTab] = useState("discounts");
+
+  // Refund state
+  const [refunds, setRefunds] = useState([]);
+  const [refundsLoading, setRefundsLoading] = useState(true);
+  const [refundStatusFilter, setRefundStatusFilter] = useState("");
+  const [refundPagination, setRefundPagination] = useState({ page: 1, pages: 1, total: 0 });
 
   // Discount state
   const [products, setProducts] = useState([]);
@@ -222,6 +229,103 @@ export default function SalesManagerDashboard() {
     }
   };
 
+  // Fetch refunds
+  const fetchRefunds = async () => {
+    if (!token) return;
+    setRefundsLoading(true);
+    try {
+      const params = new URLSearchParams({
+        page: String(refundPagination.page),
+        limit: "20",
+      });
+      if (refundStatusFilter) {
+        params.append("status", refundStatusFilter);
+      }
+      
+      const response = await authenticatedFetch(`${REFUNDS_BASE}?${params.toString()}`);
+      if (!response) return;
+      if (!response.ok) throw new Error("Failed to load refunds");
+      const data = await response.json();
+      if (data.success) {
+        setRefunds(data.data.refunds || []);
+        setRefundPagination(data.data.pagination || { page: 1, pages: 1, total: 0 });
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setRefundsLoading(false);
+    }
+  };
+
+  // Approve refund
+  const handleApproveRefund = async (refundId) => {
+    const confirmReturn = window.confirm(
+      "Has the product been returned to the store? Click OK if yes, Cancel if not yet received."
+    );
+
+    setError("");
+    setSuccess("");
+    try {
+      const response = await authenticatedFetch(`${REFUNDS_BASE}/${refundId}/approve`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ product_returned: confirmReturn }),
+      });
+
+      if (!response) return;
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to approve refund");
+      }
+
+      const data = await response.json();
+      if (data.success) {
+        setSuccess("Refund approved successfully! Product added back to stock and customer notified.");
+        fetchRefunds();
+        setTimeout(() => setSuccess(""), 5000);
+      }
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  // Reject refund
+  const handleRejectRefund = async (refundId) => {
+    const rejectionReason = prompt("Please provide a reason for rejecting this refund:");
+    if (!rejectionReason || !rejectionReason.trim()) {
+      return;
+    }
+
+    setError("");
+    setSuccess("");
+    try {
+      const response = await authenticatedFetch(`${REFUNDS_BASE}/${refundId}/reject`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ rejection_reason: rejectionReason }),
+      });
+
+      if (!response) return;
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to reject refund");
+      }
+
+      const data = await response.json();
+      if (data.success) {
+        setSuccess("Refund request rejected.");
+        fetchRefunds();
+        setTimeout(() => setSuccess(""), 5000);
+      }
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   // Fetch analytics
   const fetchAnalytics = async () => {
     if (!token) return;
@@ -334,6 +438,8 @@ export default function SalesManagerDashboard() {
       fetchInvoices();
     } else if (activeTab === "analytics") {
       fetchAnalytics();
+    } else if (activeTab === "refunds") {
+      fetchRefunds();
     }
   }, [activeTab, token]);
 
@@ -348,6 +454,26 @@ export default function SalesManagerDashboard() {
       fetchAnalytics();
     }
   }, [analyticsDateRange]);
+
+  useEffect(() => {
+    if (activeTab === "refunds") {
+      // Reset to page 1 when filter changes
+      if (refundPagination.page !== 1) {
+        setRefundPagination((prev) => ({ ...prev, page: 1 }));
+      } else {
+        // If already on page 1, fetch immediately
+        fetchRefunds();
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refundStatusFilter]);
+
+  useEffect(() => {
+    if (activeTab === "refunds") {
+      fetchRefunds();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refundPagination.page]);
 
   // Simple bar chart component
   const SimpleBarChart = ({ data, labels, title }) => {
@@ -432,6 +558,7 @@ export default function SalesManagerDashboard() {
             {[
               { id: "discounts", label: "Discount Management" },
               { id: "invoices", label: "Invoices" },
+              { id: "refunds", label: "Refund Requests" },
               { id: "analytics", label: "Revenue & Analytics" },
             ].map((tab) => (
               <button
@@ -795,6 +922,189 @@ export default function SalesManagerDashboard() {
                             })
                           }
                           disabled={invoicePagination.page === invoicePagination.pages}
+                          className="px-4 py-2 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Refunds Tab */}
+        {activeTab === "refunds" && (
+          <div className="space-y-6">
+            {/* Filter */}
+            <div className="bg-white rounded-lg shadow p-6">
+              <h2 className="text-xl font-semibold mb-4">Refund Requests</h2>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Filter by Status
+                </label>
+                <select
+                  value={refundStatusFilter}
+                  onChange={(e) => {
+                    setRefundStatusFilter(e.target.value);
+                    setRefundPagination({ ...refundPagination, page: 1 });
+                  }}
+                  className="w-full md:w-64 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                >
+                  <option value="">All Status</option>
+                  <option value="pending">Pending</option>
+                  <option value="approved">Approved</option>
+                  <option value="rejected">Rejected</option>
+                  <option value="processed">Processed</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Refunds List */}
+            <div className="bg-white rounded-lg shadow overflow-hidden">
+              {refundsLoading ? (
+                <div className="p-6 text-center text-gray-500">Loading refunds...</div>
+              ) : refunds.length === 0 ? (
+                <div className="p-6 text-center text-gray-500">No refund requests found</div>
+              ) : (
+                <>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Refund #
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Customer
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Product
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Order #
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Quantity
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Refund Amount
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Status
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Request Date
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Actions
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {refunds.map((refund) => (
+                          <tr key={refund._id} className="hover:bg-gray-50">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                              {refund.refund_number}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {refund.customer_id?.first_name} {refund.customer_id?.last_name}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {refund.product_id?.name || "N/A"}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {refund.order_id?.order_number || "N/A"}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {refund.quantity}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                              ${refund.refund_amount?.toFixed(2) || "0.00"}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span
+                                className={`px-2 py-1 text-xs font-medium rounded-full ${
+                                  refund.status === "approved"
+                                    ? "bg-green-100 text-green-800"
+                                    : refund.status === "rejected"
+                                    ? "bg-red-100 text-red-800"
+                                    : refund.status === "processed"
+                                    ? "bg-blue-100 text-blue-800"
+                                    : "bg-yellow-100 text-yellow-800"
+                                }`}
+                              >
+                                {refund.status}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {new Date(refund.request_date).toLocaleDateString()}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                              {refund.status === "pending" && (
+                                <div className="flex space-x-2">
+                                  <button
+                                    onClick={() => handleApproveRefund(refund._id)}
+                                    className="text-green-600 hover:text-green-900 font-semibold"
+                                  >
+                                    Approve
+                                  </button>
+                                  <button
+                                    onClick={() => handleRejectRefund(refund._id)}
+                                    className="text-red-600 hover:text-red-900 font-semibold"
+                                  >
+                                    Reject
+                                  </button>
+                                </div>
+                              )}
+                              {refund.status === "approved" && !refund.product_returned && (
+                                <span className="text-yellow-600 text-xs">Product not returned yet</span>
+                              )}
+                              {refund.status === "approved" && refund.product_returned && (
+                                <span className="text-green-600 text-xs">Product returned</span>
+                              )}
+                              {refund.reason && (
+                                <div className="mt-1">
+                                  <span className="text-xs text-gray-500" title={refund.reason}>
+                                    {refund.reason.length > 30 ? refund.reason.substring(0, 30) + "..." : refund.reason}
+                                  </span>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {/* Pagination */}
+                  {refundPagination.pages > 1 && (
+                    <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+                      <div className="text-sm text-gray-700">
+                        Page {refundPagination.page} of {refundPagination.pages} ({refundPagination.total} total)
+                      </div>
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() =>
+                            setRefundPagination({
+                              ...refundPagination,
+                              page: Math.max(1, refundPagination.page - 1),
+                            })
+                          }
+                          disabled={refundPagination.page === 1}
+                          className="px-4 py-2 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Previous
+                        </button>
+                        <button
+                          onClick={() =>
+                            setRefundPagination({
+                              ...refundPagination,
+                              page: Math.min(refundPagination.pages, refundPagination.page + 1),
+                            })
+                          }
+                          disabled={refundPagination.page === refundPagination.pages}
                           className="px-4 py-2 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           Next

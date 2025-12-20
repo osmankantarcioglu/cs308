@@ -10,6 +10,14 @@ export default function ProfilePage() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('profile'); // 'profile' or 'orders'
+  
+  // Refund modal state
+  const [showRefundModal, setShowRefundModal] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [selectedProducts, setSelectedProducts] = useState([]);
+  const [refundReason, setRefundReason] = useState('');
+  const [refunds, setRefunds] = useState({}); // orderId -> refunds array
+  const [submittingRefund, setSubmittingRefund] = useState(false);
 
   // Fetch orders
   useEffect(() => {
@@ -29,7 +37,34 @@ export default function ProfilePage() {
         if (response.ok) {
           const data = await response.json();
           if (data.success) {
-            setOrders(data.data || []);
+            const ordersData = data.data || [];
+            setOrders(ordersData);
+            
+            // Fetch refunds for delivered orders
+            const deliveredOrders = ordersData.filter(o => o.status === 'delivered');
+            const refundPromises = deliveredOrders.map(async (order) => {
+              try {
+                const refundResponse = await fetch(`${API_BASE_URL}/${order._id}/refunds`, {
+                  headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (refundResponse.ok) {
+                  const refundData = await refundResponse.json();
+                  if (refundData.success) {
+                    return { orderId: order._id, refunds: refundData.data };
+                  }
+                }
+              } catch (err) {
+                console.error(`Error fetching refunds for order ${order._id}:`, err);
+              }
+              return { orderId: order._id, refunds: [] };
+            });
+            
+            const refundsResults = await Promise.all(refundPromises);
+            const refundsMap = {};
+            refundsResults.forEach(({ orderId, refunds: orderRefunds }) => {
+              refundsMap[orderId] = orderRefunds;
+            });
+            setRefunds(refundsMap);
           }
         }
       } catch (error) {
@@ -74,34 +109,129 @@ export default function ProfilePage() {
     }
   };
 
-  const handleRequestRefund = async (orderId) => {
-    const reason = prompt('Please provide a reason for the refund:');
-    if (!reason) return;
-   
+  const openRefundModal = (order) => {
+    // Check if order is within 30 days
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const orderDate = new Date(order.order_date);
+    
+    if (orderDate < thirtyDaysAgo) {
+      alert('Refund period has expired. Refunds can only be requested within 30 days of purchase.');
+      return;
+    }
+
+    // Check if all products already have pending/approved refunds
+    const orderRefunds = refunds[order._id] || [];
+    const allProductsHaveRefunds = order.items.every((item) => {
+      const productId = item.product_id?._id || item.product_id;
+      return orderRefunds.some(
+        (refund) =>
+          (refund.product_id._id === productId || refund.product_id === productId) &&
+          (refund.status === 'pending' || refund.status === 'approved')
+      );
+    });
+
+    if (allProductsHaveRefunds) {
+      alert('You already have a refund request in progress for all products in this order. Please wait for the current request to be processed.');
+      return;
+    }
+    
+    // Make sure order.items exists and has data
+    if (!order.items || order.items.length === 0) {
+      alert('This order has no items to refund.');
+      return;
+    }
+
+    setSelectedOrder(order);
+    setSelectedProducts([]);
+    setRefundReason('');
+    setShowRefundModal(true);
+  };
+
+  const toggleProductSelection = (productId) => {
+    setSelectedProducts((prev) =>
+      prev.includes(productId)
+        ? prev.filter((id) => id !== productId)
+        : [...prev, productId]
+    );
+  };
+
+  const handleSubmitRefund = async () => {
+    if (selectedProducts.length === 0) {
+      alert('Please select at least one product to refund');
+      return;
+    }
+    
+    if (!refundReason.trim()) {
+      alert('Please provide a reason for the refund');
+      return;
+    }
+
+    setSubmittingRefund(true);
+    
     try {
-      const response = await fetch(`${API_BASE_URL}/${orderId}/refund`, {
+      const response = await fetch(`${API_BASE_URL}/${selectedOrder._id}/refund`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ reason })
+        body: JSON.stringify({
+          product_ids: selectedProducts,
+          reason: refundReason
+        })
       });
      
       if (response.ok) {
+        const data = await response.json();
         alert('Refund request submitted successfully');
-        setOrders((prev) =>
-          prev.map((order) =>
-            order._id === orderId ? { ...order, refundRequested: true } : order
-          )
-        );
+        setShowRefundModal(false);
+        setSelectedOrder(null);
+        setSelectedProducts([]);
+        setRefundReason('');
+        
+        // Refresh refunds for this order
+        const refundResponse = await fetch(`${API_BASE_URL}/${selectedOrder._id}/refunds`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (refundResponse.ok) {
+          const refundData = await refundResponse.json();
+          if (refundData.success) {
+            setRefunds((prev) => ({
+              ...prev,
+              [selectedOrder._id]: refundData.data
+            }));
+          }
+        }
       } else {
         const errorData = await response.json();
-        alert(`Error: ${errorData.error}`);
+        alert(`Error: ${errorData.error || 'Failed to submit refund request'}`);
       }
     } catch (error) {
       alert(`Error: ${error.message}`);
+    } finally {
+      setSubmittingRefund(false);
     }
+  };
+
+  const hasRefundForProduct = (orderId, productId) => {
+    const orderRefunds = refunds[orderId] || [];
+    return orderRefunds.some(
+      (refund) => {
+        const refundProductId = refund.product_id?._id || refund.product_id;
+        return refundProductId === productId &&
+          (refund.status === 'pending' || refund.status === 'approved');
+      }
+    );
+  };
+
+  const getRefundStatusForProduct = (orderId, productId) => {
+    const orderRefunds = refunds[orderId] || [];
+    const refund = orderRefunds.find((r) => {
+      const refundProductId = r.product_id?._id || r.product_id;
+      return refundProductId === productId;
+    });
+    return refund?.status;
   };
 
   if (!isAuthenticated) {
@@ -329,39 +459,54 @@ export default function ProfilePage() {
                     <div className="mb-4">
                       <p className="text-sm font-medium text-gray-700 mb-3">Items ({order.items.length})</p>
                       <div className="space-y-3">
-                        {order.items.map((item, index) => (
-                          <div key={index} className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
-                            <div className="w-16 h-16 bg-gray-200 rounded-lg overflow-hidden flex-shrink-0">
-                              {item.product_id?.images?.[0] ? (
-                                <img
-                                  src={item.product_id.images[0]}
-                                  alt={item.product_id?.name || 'Product'}
-                                  className="w-full h-full object-cover"
-                                />
-                              ) : (
-                                <div className="w-full h-full flex items-center justify-center">
-                                  <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                                  </svg>
-                                </div>
-                              )}
+                        {order.items.map((item, index) => {
+                          const productId = item.product_id?._id || item.product_id;
+                          const hasRefund = hasRefundForProduct(order._id, productId);
+                          const refundStatus = getRefundStatusForProduct(order._id, productId);
+                          
+                          return (
+                            <div key={index} className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
+                              <div className="w-16 h-16 bg-gray-200 rounded-lg overflow-hidden flex-shrink-0">
+                                {item.product_id?.images?.[0] ? (
+                                  <img
+                                    src={item.product_id.images[0]}
+                                    alt={item.product_id?.name || 'Product'}
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center">
+                                    <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                                    </svg>
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex-1">
+                                <Link
+                                  to={`/products/${productId}`}
+                                  className="font-semibold text-gray-900 hover:text-primary transition-colors"
+                                >
+                                  {item.product_id?.name || 'Product'}
+                                </Link>
+                                <p className="text-sm text-gray-600">
+                                  Quantity: {item.quantity} × ${item.price_at_time.toFixed(2)}
+                                </p>
+                                {hasRefund && (
+                                  <span className={`inline-block mt-1 px-2 py-0.5 text-xs font-semibold rounded ${
+                                    refundStatus === 'approved' ? 'bg-green-100 text-green-800' :
+                                    refundStatus === 'rejected' ? 'bg-red-100 text-red-800' :
+                                    'bg-yellow-100 text-yellow-800'
+                                  }`}>
+                                    Refund {refundStatus}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-right">
+                                <p className="font-bold text-gray-900">${item.total_price.toFixed(2)}</p>
+                              </div>
                             </div>
-                            <div className="flex-1">
-                              <Link
-                                to={`/products/${item.product_id?._id}`}
-                                className="font-semibold text-gray-900 hover:text-primary transition-colors"
-                              >
-                                {item.product_id?.name || 'Product'}
-                              </Link>
-                              <p className="text-sm text-gray-600">
-                                Quantity: {item.quantity} × ${item.price_at_time.toFixed(2)}
-                              </p>
-                            </div>
-                            <div className="text-right">
-                              <p className="font-bold text-gray-900">${item.total_price.toFixed(2)}</p>
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
 
@@ -388,31 +533,45 @@ export default function ProfilePage() {
                         </button>
                       )}
                      
-                      {order.status === 'delivered' && (
-                        <>
-                          {order.refundRequested ? (
-                            <span className="px-4 py-2 bg-yellow-100 text-yellow-800 font-semibold rounded-lg">
-                              Refund Requested
-                            </span>
-                          ) : (
-                            <button
-                              onClick={() => handleRequestRefund(order._id)}
-                              className="px-4 py-2 bg-yellow-500 text-white font-semibold rounded-lg hover:bg-yellow-600 transition-colors"
-                            >
-                              Request Refund
-                            </button>
-                          )}
-                          {order.items.map((item) => (
-                            <Link
-                              key={item.product_id?._id}
-                              to={`/products/${item.product_id?._id}`}
-                              className="px-4 py-2 bg-blue-500 text-white font-semibold rounded-lg hover:bg-blue-600 transition-colors"
-                            >
-                              Review {item.product_id?.name}
-                            </Link>
-                          ))}
-                        </>
-                      )}
+                      {order.status === 'delivered' && (() => {
+                        const orderRefunds = refunds[order._id] || [];
+                        const allProductsHaveRefunds = order.items.every((item) => {
+                          const productId = item.product_id?._id || item.product_id;
+                          return orderRefunds.some(
+                            (refund) => {
+                              const refundProductId = refund.product_id?._id || refund.product_id;
+                              return refundProductId === productId &&
+                                (refund.status === 'pending' || refund.status === 'approved');
+                            }
+                          );
+                        });
+
+                        return (
+                          <>
+                            {allProductsHaveRefunds ? (
+                              <span className="px-4 py-2 bg-yellow-100 text-yellow-800 font-semibold rounded-lg">
+                                Refund Request In Progress
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => openRefundModal(order)}
+                                className="px-4 py-2 bg-yellow-500 text-white font-semibold rounded-lg hover:bg-yellow-600 transition-colors"
+                              >
+                                Request Refund
+                              </button>
+                            )}
+                            {order.items.map((item) => (
+                              <Link
+                                key={item.product_id?._id || item.product_id}
+                                to={`/products/${item.product_id?._id || item.product_id}`}
+                                className="px-4 py-2 bg-blue-500 text-white font-semibold rounded-lg hover:bg-blue-600 transition-colors"
+                              >
+                                Review {item.product_id?.name}
+                              </Link>
+                            ))}
+                          </>
+                        );
+                      })()}
                      
                       {order.status === 'in-transit' && (
                         <div className="flex items-center gap-2 text-blue-600">
@@ -427,6 +586,160 @@ export default function ProfilePage() {
                 </div>
               ))
             )}
+          </div>
+        )}
+
+        {/* Refund Request Modal */}
+        {showRefundModal && selectedOrder && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="p-6 border-b border-gray-200">
+                <h2 className="text-2xl font-bold text-gray-900">Request Refund</h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  Select products from order {selectedOrder.order_number} to request a refund
+                </p>
+              </div>
+
+              <div className="p-6">
+                {/* Product Selection */}
+                <div className="mb-6">
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                    Select Products to Refund
+                  </label>
+                  {!selectedOrder.items || selectedOrder.items.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      No products available for refund
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {selectedOrder.items.map((item, index) => {
+                        const productId = item.product_id?._id || item.product_id;
+                        const hasRefund = hasRefundForProduct(selectedOrder._id, productId);
+                        const isSelected = selectedProducts.includes(productId);
+                      
+                      return (
+                        <div
+                          key={index}
+                          className={`border-2 rounded-lg p-4 cursor-pointer transition-colors ${
+                            hasRefund
+                              ? 'border-gray-200 bg-gray-50 opacity-60 cursor-not-allowed'
+                              : isSelected
+                              ? 'border-yellow-500 bg-yellow-50'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                          onClick={() => !hasRefund && toggleProductSelection(productId)}
+                        >
+                          <div className="flex items-center gap-4">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              disabled={hasRefund}
+                              onChange={() => !hasRefund && toggleProductSelection(productId)}
+                              className="w-5 h-5 text-yellow-500 rounded focus:ring-yellow-500"
+                            />
+                            <div className="w-16 h-16 bg-gray-200 rounded-lg overflow-hidden flex-shrink-0">
+                              {item.product_id?.images?.[0] ? (
+                                <img
+                                  src={item.product_id.images[0]}
+                                  alt={item.product_id?.name || 'Product'}
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center">
+                                  <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                                  </svg>
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex-1">
+                              <p className="font-semibold text-gray-900">
+                                {item.product_id?.name || 'Product'}
+                              </p>
+                              <p className="text-sm text-gray-600">
+                                Quantity: {item.quantity} × ${item.price_at_time.toFixed(2)} = ${item.total_price.toFixed(2)}
+                              </p>
+                              {hasRefund && (
+                                <p className="text-xs text-yellow-600 mt-1 font-medium">
+                                  Refund already requested for this product
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Reason Input */}
+                <div className="mb-6">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Reason for Refund <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    value={refundReason}
+                    onChange={(e) => setRefundReason(e.target.value)}
+                    placeholder="Please provide a reason for requesting a refund..."
+                    rows={4}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                  />
+                </div>
+
+                {/* Selected Products Summary */}
+                {selectedProducts.length > 0 && (
+                  <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <p className="text-sm font-medium text-gray-700 mb-2">Selected for Refund:</p>
+                    <ul className="list-disc list-inside space-y-1">
+                      {selectedOrder.items
+                        .filter((item) => {
+                          const productId = item.product_id?._id || item.product_id;
+                          return selectedProducts.includes(productId);
+                        })
+                        .map((item, index) => (
+                          <li key={index} className="text-sm text-gray-600">
+                            {item.product_id?.name} - ${item.total_price.toFixed(2)}
+                          </li>
+                        ))}
+                    </ul>
+                    <p className="text-sm font-semibold text-gray-900 mt-2">
+                      Total Refund Amount: $
+                      {selectedOrder.items
+                        .filter((item) => {
+                          const productId = item.product_id?._id || item.product_id;
+                          return selectedProducts.includes(productId);
+                        })
+                        .reduce((sum, item) => sum + item.total_price, 0)
+                        .toFixed(2)}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
+                <button
+                  onClick={() => {
+                    setShowRefundModal(false);
+                    setSelectedOrder(null);
+                    setSelectedProducts([]);
+                    setRefundReason('');
+                  }}
+                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                  disabled={submittingRefund}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSubmitRefund}
+                  disabled={selectedProducts.length === 0 || !refundReason.trim() || submittingRefund}
+                  className="px-6 py-2 bg-yellow-500 text-white font-semibold rounded-lg hover:bg-yellow-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {submittingRefund ? 'Submitting...' : 'Submit Refund Request'}
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>

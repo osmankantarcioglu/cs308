@@ -803,13 +803,54 @@ router.post('/:id/cancel', authenticate, async function(req, res, next) {
 });
 
 /**
+ * @route   GET /orders/:id/refunds
+ * @desc    Get refund requests for an order
+ */
+router.get('/:id/refunds', authenticate, async function(req, res, next) {
+    try {
+        const order = await Order.findById(req.params.id);
+        
+        if (!order) {
+            throw new NotFoundError('Order not found');
+        }
+        
+        // Verify user owns this order
+        if (order.customer_id.toString() !== req.user._id.toString()) {
+            throw new ValidationError('You can only view refunds for your own orders');
+        }
+        
+        const refunds = await Refund.findByOrder(order._id)
+            .populate('product_id', 'name images')
+            .lean();
+        
+        res.json({
+            success: true,
+            data: refunds
+        });
+    } catch (error) {
+        if (error.name === 'CastError') {
+            next(new NotFoundError('Invalid order ID'));
+        } else {
+            next(error);
+        }
+    }
+});
+
+/**
  * @route   POST /orders/:id/refund
- * @desc    Request refund for delivered order (within 30 days)
+ * @desc    Request refund for specific products in a delivered order (within 30 days)
+ * @body    { product_ids: [String], reason: String } - product_ids array contains ObjectIds of products to refund
  */
 router.post('/:id/refund', authenticate, async function(req, res, next) {
     try {
-        const { reason } = req.body;
-        const order = await Order.findById(req.params.id);
+        const { product_ids, reason } = req.body;
+        
+        if (!product_ids || !Array.isArray(product_ids) || product_ids.length === 0) {
+            throw new ValidationError('At least one product must be selected for refund');
+        }
+        
+        const order = await Order.findById(req.params.id)
+            .populate('items.product_id');
         
         if (!order) {
             throw new NotFoundError('Order not found');
@@ -830,23 +871,37 @@ router.post('/:id/refund', authenticate, async function(req, res, next) {
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
         
         if (order.order_date < thirtyDaysAgo) {
-            throw new ValidationError('Refund period has expired (30 days)');
+            throw new ValidationError('Refund period has expired (30 days from purchase)');
         }
         
-        // Check if refund already exists
-        const existingRefund = await Refund.findOne({ order_id: order._id });
-        if (existingRefund) {
-            throw new ValidationError('Refund request already exists for this order');
+        // Find items to refund
+        const itemsToRefund = order.items.filter(item => 
+            product_ids.includes(item.product_id._id.toString())
+        );
+        
+        if (itemsToRefund.length === 0) {
+            throw new ValidationError('No matching products found in this order');
         }
         
-        // Create refund requests for each item in the order
-        const refundEntries = order.items.map((item) => ({
+        // Check if refund already exists for these products
+        const existingRefunds = await Refund.find({
+            order_id: order._id,
+            product_id: { $in: product_ids },
+            status: { $in: [Enum.REFUND_STATUS.PENDING, Enum.REFUND_STATUS.APPROVED] }
+        });
+        
+        if (existingRefunds.length > 0) {
+            throw new ValidationError('Refund request already exists for one or more of these products');
+        }
+        
+        // Create refund requests for selected items
+        const refundEntries = itemsToRefund.map((item) => ({
             refund_number: generateRefundNumber(),
             order_id: order._id,
             customer_id: req.user._id,
-            product_id: item.product_id,
+            product_id: item.product_id._id,
             quantity: item.quantity,
-            purchase_price: item.price_at_time,
+            purchase_price: item.price_at_time, // This already includes discount if applied at purchase time
             refund_amount: item.price_at_time * item.quantity,
             reason: reason || 'Customer requested refund',
             status: Enum.REFUND_STATUS.PENDING
