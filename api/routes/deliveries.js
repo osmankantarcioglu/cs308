@@ -34,10 +34,22 @@ router.get('/', async function(req, res, next) {
         }
 
         if (search) {
-            query.$or = [
+            const searchConditions = [
                 { delivery_address: { $regex: search, $options: 'i' } },
                 { tracking_number: { $regex: search, $options: 'i' } }
             ];
+            
+            // If search looks like an ObjectId, also search by _id
+            if (/^[0-9a-fA-F]{24}$/.test(search)) {
+                const mongoose = require('mongoose');
+                try {
+                    searchConditions.push({ _id: new mongoose.Types.ObjectId(search) });
+                } catch (e) {
+                    // Invalid ObjectId format, ignore
+                }
+            }
+            
+            query.$or = searchConditions;
         }
 
         const [deliveries, total] = await Promise.all([

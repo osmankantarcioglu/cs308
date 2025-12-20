@@ -662,21 +662,21 @@ export default function ProductManagerDashboard() {
           ))}
         </section>
 
-        {/* Delivery pipeline + invoices */}
+        {/* Delivery List + invoices */}
         <section className="grid grid-cols-1 xl:grid-cols-3 gap-6">
           <div className="xl:col-span-2 bg-slate-900/80 rounded-3xl p-6 ring-1 ring-white/5">
             <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
               <div>
-                <h2 className="text-white text-2xl font-semibold">Delivery Pipeline</h2>
-                <p className="text-slate-400 text-sm">Control order fulfillment statuses</p>
+                <h2 className="text-white text-2xl font-semibold">Delivery List</h2>
+                <p className="text-slate-400 text-sm">Manage individual product deliveries</p>
               </div>
               <div className="flex flex-wrap gap-3">
                 <select
                   className="bg-slate-800 text-slate-200 px-4 py-2 rounded-2xl border border-white/5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  value={orderStatusFilter}
-                  onChange={(e) => setOrderStatusFilter(e.target.value)}
+                  value={deliveryStatus}
+                  onChange={(e) => setDeliveryStatus(e.target.value)}
                 >
-                  {ORDER_STATUS_OPTIONS.map((option) => (
+                  {DELIVERY_STATUS_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
                     </option>
@@ -684,56 +684,69 @@ export default function ProductManagerDashboard() {
                 </select>
                 <input
                   type="text"
-                  placeholder="Search order # or address"
+                  placeholder="Search delivery ID or address"
                   className="bg-slate-800 text-slate-200 px-4 py-2 rounded-2xl border border-white/5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  value={orderSearchTerm}
-                  onChange={(e) => setOrderSearchTerm(e.target.value)}
+                  value={deliverySearch}
+                  onChange={(e) => setDeliverySearch(e.target.value)}
                 />
               </div>
             </div>
 
-            {loadingOrders ? (
+            {deliveriesLoading ? (
               <div className="flex items-center justify-center py-16">
                 <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-indigo-500"></div>
               </div>
-            ) : orders.length === 0 ? (
-              <div className="text-center py-16 text-slate-500">No orders match the selected filters.</div>
+            ) : deliveries.length === 0 ? (
+              <div className="text-center py-16 text-slate-500">No deliveries match the selected filters.</div>
             ) : (
               <div className="space-y-4">
-                {orders.map((order) => (
+                {deliveries.map((delivery) => (
                   <div
-                    key={order._id}
+                    key={delivery._id}
                     className="bg-slate-900 rounded-2xl p-5 border border-white/5 hover:border-indigo-500/40 transition"
                   >
                     <div className="flex flex-wrap items-start justify-between gap-4">
-                      <div>
-                        <p className="text-sm text-slate-500">Order</p>
-                        <p className="text-lg font-semibold text-white">{order.order_number}</p>
-                        <p className="text-sm text-slate-400 mt-1">
-                          {order.customer_id?.first_name} {order.customer_id?.last_name} · {order.customer_id?.email}
-                        </p>
+                      <div className="flex-1">
+                        <p className="text-sm text-slate-500">Delivery ID</p>
+                        <p className="text-lg font-semibold text-white font-mono">{delivery._id}</p>
                       </div>
-                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${STATUS_STYLES[order.status] || STATUS_STYLES.processing}`}>
-                        {order.status.replace("-", " ")}
-                      </span>
+                      <div className="flex items-center gap-3">
+                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${STATUS_STYLES[delivery.status] || STATUS_STYLES.pending}`}>
+                          {delivery.status === 'delivered' ? 'Completed' : delivery.status.replace("-", " ")}
+                        </span>
+                      </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 text-sm text-slate-300">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4 text-sm">
                       <div>
-                        <p className="text-slate-500 text-xs uppercase tracking-widest mb-1">Delivery Address</p>
-                        <p>{order.delivery_address}</p>
-                      </div>
-                      <div>
-                        <p className="text-slate-500 text-xs uppercase tracking-widest mb-1">Items</p>
-                        <p>
-                          {order.items
-                            ?.map((item) => `${item.product_id?.name ?? "Product"} ×${item.quantity}`)
-                            .join(", ")}
+                        <p className="text-slate-500 text-xs uppercase tracking-widest mb-1">Customer ID</p>
+                        <p className="text-slate-300 font-mono text-xs break-all">{delivery.customer_id?._id || delivery.customer_id}</p>
+                        <p className="text-slate-400 mt-1">
+                          {delivery.customer_id?.first_name} {delivery.customer_id?.last_name}
                         </p>
                       </div>
                       <div>
-                        <p className="text-slate-500 text-xs uppercase tracking-widest mb-1">Invoice Total</p>
-                        <p className="font-semibold text-white">${order.total_amount?.toFixed(2)}</p>
+                        <p className="text-slate-500 text-xs uppercase tracking-widest mb-1">Product ID</p>
+                        <p className="text-slate-300 font-mono text-xs break-all">{delivery.product_id?._id || delivery.product_id}</p>
+                        <p className="text-slate-400 mt-1">{delivery.product_id?.name || 'Product'}</p>
+                      </div>
+                      <div>
+                        <p className="text-slate-500 text-xs uppercase tracking-widest mb-1">Quantity</p>
+                        <p className="text-white font-semibold text-lg">{delivery.quantity}</p>
+                      </div>
+                      <div>
+                        <p className="text-slate-500 text-xs uppercase tracking-widest mb-1">Total Price</p>
+                        <p className="text-white font-semibold text-lg">${delivery.total_price?.toFixed(2) || '0.00'}</p>
+                      </div>
+                      <div className="md:col-span-2 lg:col-span-2">
+                        <p className="text-slate-500 text-xs uppercase tracking-widest mb-1">Delivery Address</p>
+                        <p className="text-slate-300 break-words">{delivery.delivery_address}</p>
+                      </div>
+                      <div>
+                        <p className="text-slate-500 text-xs uppercase tracking-widest mb-1">Delivery Status</p>
+                        <p className={`font-semibold ${delivery.status === 'delivered' ? 'text-emerald-400' : delivery.status === 'failed' ? 'text-rose-400' : 'text-amber-400'}`}>
+                          {delivery.status === 'delivered' ? '✓ Completed' : delivery.status === 'pending' ? '⏳ Pending' : delivery.status === 'in-transit' ? '🚚 In Transit' : '✗ Failed'}
+                        </p>
                       </div>
                     </div>
 
@@ -743,39 +756,37 @@ export default function ProductManagerDashboard() {
                       </label>
                       <select
                         className="bg-slate-800 text-slate-200 px-4 py-2 rounded-2xl border border-white/5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        value={order.status}
-                        onChange={(e) => handleOrderStatusChange(order._id, e.target.value)}
-                        disabled={updatingOrderId === order._id}
+                        value={delivery.status}
+                        onChange={(e) => handleDeliveryStatusChange(delivery._id, e.target.value)}
                       >
-                        {ORDER_STATUS_OPTIONS.filter((opt) => opt.value !== "all").map((option) => (
+                        {DELIVERY_STATUS_OPTIONS.filter((opt) => opt.value !== "all").map((option) => (
                           <option key={option.value} value={option.value}>
                             {option.label}
                           </option>
                         ))}
                       </select>
-                      {updatingOrderId === order._id && <span className="text-xs text-indigo-300">Saving…</span>}
                     </div>
                   </div>
                 ))}
               </div>
             )}
 
-            {orderPagination.pages > 1 && (
+            {deliveryPagination.pages > 1 && (
               <div className="flex items-center justify-between mt-6 text-slate-400 text-sm">
                 <span>
-                  Page {orderPagination.page} of {orderPagination.pages} • {orderPagination.total} orders
+                  Page {deliveryPagination.page} of {deliveryPagination.pages} • {deliveryPagination.total} deliveries
                 </span>
                 <div className="space-x-2">
                   <button
-                    onClick={() => setOrderPage((p) => Math.max(1, p - 1))}
-                    disabled={orderPagination.page === 1}
+                    onClick={() => setDeliveryPage((p) => Math.max(1, p - 1))}
+                    disabled={deliveryPagination.page === 1}
                     className="px-3 py-1 rounded-xl bg-slate-800 text-white disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     Prev
                   </button>
                   <button
-                    onClick={() => setOrderPage((p) => Math.min(orderPagination.pages, p + 1))}
-                    disabled={orderPagination.page === orderPagination.pages}
+                    onClick={() => setDeliveryPage((p) => Math.min(deliveryPagination.pages, p + 1))}
+                    disabled={deliveryPagination.page === deliveryPagination.pages}
                     className="px-3 py-1 rounded-xl bg-slate-800 text-white disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     Next
