@@ -8,7 +8,7 @@ const Delivery = require('../db/models/Delivery');
 const Invoice = require('../db/models/Invoice');
 const Users = require('../db/models/Users');
 const { authenticate } = require('../lib/auth');
-const { NotFoundError, ValidationError } = require('../lib/Error');
+const { NotFoundError, ValidationError, ForbiddenError } = require('../lib/Error');
 const Enum = require('../config/Enum');
 const { requireAdminOrProductManager } = require('../lib/middleware');
 const { generateInvoicePDF } = require('../services/invoiceService');
@@ -358,16 +358,26 @@ router.post('/complete-order', authenticate, async function(req, res, next) {
                 billing_address: order.delivery_address
             });
 
-            // Generate PDF invoice
-            invoicePdfPath = await generateInvoicePDF(order, invoice);
-            invoice.pdf_path = invoicePdfPath;
-            
+            // Save invoice first to ensure it's in the database
             await invoice.save();
-            console.log('Invoice created:', invoice.invoice_number);
+            console.log('Invoice saved to database:', invoice.invoice_number);
 
-            // Update order with invoice path
-            order.invoice_path = invoicePdfPath;
-            await order.save();
+            // Generate PDF invoice (after saving to database)
+            try {
+                invoicePdfPath = await generateInvoicePDF(order, invoice);
+                invoice.pdf_path = invoicePdfPath;
+                await invoice.save();
+                console.log('Invoice PDF generated and saved:', invoicePdfPath);
+            } catch (pdfError) {
+                console.error('Error generating PDF, but invoice is saved:', pdfError);
+                // Invoice is already saved, PDF generation failure won't affect invoice record
+            }
+
+            // Update order with invoice path (if PDF was generated)
+            if (invoicePdfPath) {
+                order.invoice_path = invoicePdfPath;
+                await order.save();
+            }
 
             // Send invoice email
             try {
@@ -381,7 +391,16 @@ router.post('/complete-order', authenticate, async function(req, res, next) {
                 // Don't fail the order if email fails
             }
         } catch (invoiceError) {
-            console.error('Error generating invoice:', invoiceError);
+            console.error('Error creating invoice:', invoiceError);
+            // Try to save invoice even if there were errors in PDF generation
+            if (invoice && !invoice._id) {
+                try {
+                    await invoice.save();
+                    console.log('Invoice saved despite errors:', invoice.invoice_number);
+                } catch (saveError) {
+                    console.error('Failed to save invoice:', saveError);
+                }
+            }
             // Don't fail the order if invoice generation fails
         }
 
@@ -862,10 +881,11 @@ router.get('/:id/invoice', authenticate, async function(req, res, next) {
             throw new NotFoundError('Order not found');
         }
         
-        // Verify user owns this order or is admin/product manager
+        // Verify user owns this order or is admin/product manager/sales manager
         const isOwner = order.customer_id._id.toString() === req.user._id.toString();
         const isAdminOrManager = req.user.role === Enum.USER_ROLES.ADMIN || 
-                                 req.user.role === Enum.USER_ROLES.PRODUCT_MANAGER;
+                                 req.user.role === Enum.USER_ROLES.PRODUCT_MANAGER ||
+                                 req.user.role === Enum.USER_ROLES.SALES_MANAGER;
         
         if (!isOwner && !isAdminOrManager) {
             throw new ValidationError('You can only view invoices for your own orders');
@@ -891,6 +911,62 @@ router.get('/:id/invoice', authenticate, async function(req, res, next) {
 });
 
 /**
+ * @route   GET /orders/:id/invoice/pdf
+ * @desc    Download invoice PDF by order ID
+ */
+router.get('/:id/invoice/pdf', authenticate, async function(req, res, next) {
+    try {
+        const order = await Order.findById(req.params.id)
+            .populate('customer_id', 'first_name last_name email');
+        
+        if (!order) {
+            throw new NotFoundError('Order not found');
+        }
+        
+        // Verify user owns this order or is admin/product manager/sales manager
+        const isOwner = order.customer_id._id.toString() === req.user._id.toString();
+        const isAdminOrManager = req.user.role === Enum.USER_ROLES.ADMIN || 
+                                 req.user.role === Enum.USER_ROLES.PRODUCT_MANAGER ||
+                                 req.user.role === Enum.USER_ROLES.SALES_MANAGER;
+        
+        if (!isOwner && !isAdminOrManager) {
+            throw new ValidationError('You can only view invoices for your own orders');
+        }
+        
+        const invoice = await Invoice.findByOrder(order._id);
+        
+        if (!invoice) {
+            throw new NotFoundError('Invoice not found for this order');
+        }
+        
+        // Use invoice pdf_path or fallback to order invoice_path
+        const pdfPathToUse = invoice.pdf_path || order.invoice_path;
+        
+        if (!pdfPathToUse) {
+            throw new NotFoundError('Invoice PDF not found');
+        }
+        
+        const path = require('path');
+        const fs = require('fs');
+        const pdfPath = path.join(__dirname, '..', 'public', pdfPathToUse);
+        
+        if (!fs.existsSync(pdfPath)) {
+            throw new NotFoundError('Invoice PDF file not found on disk');
+        }
+        
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `inline; filename="invoice-${invoice.invoice_number}.pdf"`);
+        res.sendFile(pdfPath);
+    } catch (error) {
+        if (error.name === 'CastError') {
+            next(new NotFoundError('Invalid order ID'));
+        } else {
+            next(error);
+        }
+    }
+});
+
+/**
  * @route   GET /orders/invoice/:invoiceId/pdf
  * @desc    Download invoice PDF
  */
@@ -904,10 +980,11 @@ router.get('/invoice/:invoiceId/pdf', authenticate, async function(req, res, nex
             throw new NotFoundError('Invoice not found');
         }
         
-        // Verify user owns this invoice or is admin/product manager
+        // Verify user owns this invoice or is admin/product manager/sales manager
         const isOwner = invoice.customer_id._id.toString() === req.user._id.toString();
         const isAdminOrManager = req.user.role === Enum.USER_ROLES.ADMIN || 
-                                 req.user.role === Enum.USER_ROLES.PRODUCT_MANAGER;
+                                 req.user.role === Enum.USER_ROLES.PRODUCT_MANAGER ||
+                                 req.user.role === Enum.USER_ROLES.SALES_MANAGER;
         
         if (!isOwner && !isAdminOrManager) {
             throw new ValidationError('You can only view invoices for your own orders');
@@ -939,18 +1016,40 @@ router.get('/invoice/:invoiceId/pdf', authenticate, async function(req, res, nex
 
 /**
  * @route   GET /orders/management/invoices
- * @desc    Get all invoices for product managers
- * @access  Admin & Product Manager
+ * @desc    Get all invoices for product managers and sales managers
+ * @access  Admin, Product Manager & Sales Manager
  */
-router.get('/management/invoices', authenticate, requireAdminOrProductManager, async function(req, res, next) {
+router.get('/management/invoices', authenticate, async function(req, res, next) {
     try {
-        const { page = 1, limit = 20, search = '' } = req.query;
+        // Check if user has permission
+        const isAdmin = req.user.role === Enum.USER_ROLES.ADMIN;
+        const isProductManager = req.user.role === Enum.USER_ROLES.PRODUCT_MANAGER;
+        const isSalesManager = req.user.role === Enum.USER_ROLES.SALES_MANAGER;
+        
+        if (!isAdmin && !isProductManager && !isSalesManager) {
+            return next(new ForbiddenError('Insufficient permissions'));
+        }
+
+        const { page = 1, limit = 20, search = '', start_date, end_date } = req.query;
         
         const pageNum = Math.max(1, parseInt(page, 10) || 1);
         const limitNum = Math.min(50, Math.max(1, parseInt(limit, 10) || 20));
         const skip = (pageNum - 1) * limitNum;
         
         const query = {};
+        
+        // Date range filter
+        if (start_date || end_date) {
+            query.invoice_date = {};
+            if (start_date) {
+                query.invoice_date.$gte = new Date(start_date);
+            }
+            if (end_date) {
+                const endDate = new Date(end_date);
+                endDate.setHours(23, 59, 59, 999);
+                query.invoice_date.$lte = endDate;
+            }
+        }
         
         if (search) {
             const searchRegex = new RegExp(search, 'i');

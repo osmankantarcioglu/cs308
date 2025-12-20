@@ -2035,8 +2035,15 @@ export default function AdminPage() {
                     {products.map((product) => (
                       <tr key={product._id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900">
-                            {product.name}
+                          <div className="flex items-center gap-2">
+                            <div className="text-sm font-medium text-gray-900">
+                              {product.name}
+                            </div>
+                            {product.active_discount && product.active_discount.discount_rate > 0 && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-red-500 text-white">
+                                {Math.round(product.active_discount.discount_rate)}% OFF
+                              </span>
+                            )}
                           </div>
                         </td>
                         <td className="px-6 py-4">
@@ -2052,6 +2059,11 @@ export default function AdminPage() {
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm text-gray-900">
                             ${product.price?.toFixed(2) || "0.00"}
+                            {product.active_discount && product.active_discount.original_price && (
+                              <span className="ml-2 text-xs text-gray-500 line-through">
+                                ${product.active_discount.original_price.toFixed(2)}
+                              </span>
+                            )}
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">

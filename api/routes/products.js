@@ -4,6 +4,7 @@ const Product = require('../db/models/Product');
 const Review = require('../db/models/Review');
 const Order = require('../db/models/Order');
 const Delivery = require('../db/models/Delivery');
+const Discount = require('../db/models/Discount');
 const Enum = require('../config/Enum');
 const { NotFoundError, ValidationError } = require('../lib/Error');
 const { authenticate, optionalAuthenticate } = require('../lib/auth');
@@ -107,7 +108,67 @@ router.get('/', async function(req, res, next) {
             .populate('created_by', 'username email')
             .sort(sortObject)
             .skip(skip)
-            .limit(parseInt(limit));
+            .limit(parseInt(limit))
+            .lean();
+        
+        // Get active discounts for these products
+        const productIds = products.map(p => p._id);
+        const now = new Date();
+        const activeDiscounts = await Discount.find({
+            'products.product_id': { $in: productIds },
+            is_active: true,
+            start_date: { $lte: now },
+            end_date: { $gte: now }
+        }).lean();
+        
+        // Create a map of product_id to discount_rate
+        // Use a Map with string keys for reliable comparison
+        const discountMap = new Map();
+        activeDiscounts.forEach(discount => {
+            discount.products.forEach(product => {
+                // Convert product_id to string for consistent comparison
+                if (!product.product_id) {
+                    return; // Skip if no product_id
+                }
+                
+                let productId;
+                // Handle both ObjectId objects and strings
+                productId = typeof product.product_id === 'object' && product.product_id.toString 
+                    ? product.product_id.toString() 
+                    : String(product.product_id);
+                
+                // If multiple discounts exist, use the highest discount rate
+                const existing = discountMap.get(productId);
+                if (!existing || discount.discount_rate > existing.discount_rate) {
+                    discountMap.set(productId, {
+                        discount_rate: discount.discount_rate,
+                        original_price: product.original_price
+                    });
+                }
+            });
+        });
+        
+        // Add discount information to products
+        const productsWithDiscount = products.map(product => {
+            // Convert _id to string for comparison
+            let productId;
+            if (product._id) {
+                productId = typeof product._id === 'object' && product._id.toString 
+                    ? product._id.toString() 
+                    : String(product._id);
+            } else {
+                return product; // Return product as-is if no _id
+            }
+            
+            const discountInfo = discountMap.get(productId);
+            if (discountInfo) {
+                product.active_discount = {
+                    discount_rate: discountInfo.discount_rate,
+                    original_price: discountInfo.original_price
+                };
+            }
+            return product;
+        });
         
         // Get total count
         const total = await Product.countDocuments(query);
@@ -115,7 +176,7 @@ router.get('/', async function(req, res, next) {
         res.json({
             success: true,
             data: {
-                products,
+                products: productsWithDiscount,
                 pagination: {
                     page: parseInt(page),
                     limit: parseInt(limit),
