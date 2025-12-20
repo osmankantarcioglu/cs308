@@ -109,13 +109,26 @@ export default function ProfilePage() {
     }
   };
 
+  const getDaysRemainingForRefund = (orderDate) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const orderDateObj = new Date(orderDate);
+    orderDateObj.setHours(0, 0, 0, 0);
+    const thirtyDaysFromPurchase = new Date(orderDateObj);
+    thirtyDaysFromPurchase.setDate(thirtyDaysFromPurchase.getDate() + 30);
+    
+    const diffTime = thirtyDaysFromPurchase - today;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    return Math.max(0, diffDays);
+  };
+
   const openRefundModal = (order) => {
     // Check if order is within 30 days
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     const orderDate = new Date(order.order_date);
+    const daysRemaining = getDaysRemainingForRefund(order.order_date);
     
-    if (orderDate < thirtyDaysAgo) {
+    if (daysRemaining === 0) {
       alert('Refund period has expired. Refunds can only be requested within 30 days of purchase.');
       return;
     }
@@ -125,9 +138,11 @@ export default function ProfilePage() {
     const allProductsHaveRefunds = order.items.every((item) => {
       const productId = item.product_id?._id || item.product_id;
       return orderRefunds.some(
-        (refund) =>
-          (refund.product_id._id === productId || refund.product_id === productId) &&
-          (refund.status === 'pending' || refund.status === 'approved')
+        (refund) => {
+          const refundProductId = refund.product_id?._id || refund.product_id;
+          return refundProductId === productId &&
+            (refund.status === 'pending' || refund.status === 'approved');
+        }
       );
     });
 
@@ -447,6 +462,35 @@ export default function ProfilePage() {
                       <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getPaymentStatusColor(order.payment_status)}`}>
                         Payment: {order.payment_status}
                       </span>
+                      {order.status === 'delivered' && (() => {
+                        const orderRefunds = refunds[order._id] || [];
+                        const hasApprovedRefund = orderRefunds.some(r => r.status === 'approved');
+                        const hasRejectedRefund = orderRefunds.some(r => r.status === 'rejected');
+                        const hasPendingRefund = orderRefunds.some(r => r.status === 'pending');
+                        
+                        if (hasApprovedRefund && !hasPendingRefund) {
+                          return (
+                            <span className="px-3 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">
+                              Refund Approved
+                            </span>
+                          );
+                        }
+                        if (hasRejectedRefund && !hasPendingRefund && !hasApprovedRefund) {
+                          return (
+                            <span className="px-3 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800">
+                              Refund Rejected
+                            </span>
+                          );
+                        }
+                        if (hasPendingRefund) {
+                          return (
+                            <span className="px-3 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800">
+                              Refund Pending
+                            </span>
+                          );
+                        }
+                        return null;
+                      })()}
                     </div>
 
                     {/* Delivery Address */}
@@ -497,7 +541,9 @@ export default function ProfilePage() {
                                     refundStatus === 'rejected' ? 'bg-red-100 text-red-800' :
                                     'bg-yellow-100 text-yellow-800'
                                   }`}>
-                                    Refund {refundStatus}
+                                    {refundStatus === 'approved' ? 'Refund Approved' :
+                                     refundStatus === 'rejected' ? 'Refund Rejected' :
+                                     'Refund Pending'}
                                   </span>
                                 )}
                               </div>
@@ -535,30 +581,63 @@ export default function ProfilePage() {
                      
                       {order.status === 'delivered' && (() => {
                         const orderRefunds = refunds[order._id] || [];
+                        
+                        // Check refund status for all products
                         const allProductsHaveRefunds = order.items.every((item) => {
                           const productId = item.product_id?._id || item.product_id;
                           return orderRefunds.some(
                             (refund) => {
                               const refundProductId = refund.product_id?._id || refund.product_id;
-                              return refundProductId === productId &&
-                                (refund.status === 'pending' || refund.status === 'approved');
+                              return refundProductId === productId;
                             }
                           );
                         });
+                        
+                        // Determine overall refund status
+                        let overallRefundStatus = null;
+                        if (allProductsHaveRefunds) {
+                          const hasApproved = orderRefunds.some(r => r.status === 'approved');
+                          const hasRejected = orderRefunds.some(r => r.status === 'rejected');
+                          const hasPending = orderRefunds.some(r => r.status === 'pending');
+                          
+                          if (hasApproved && !hasPending) {
+                            overallRefundStatus = 'approved';
+                          } else if (hasRejected && !hasPending && !hasApproved) {
+                            overallRefundStatus = 'rejected';
+                          } else if (hasPending) {
+                            overallRefundStatus = 'pending';
+                          }
+                        }
+
+                        const daysRemaining = getDaysRemainingForRefund(order.order_date);
+                        const canRequestRefund = daysRemaining > 0;
 
                         return (
                           <>
-                            {allProductsHaveRefunds ? (
+                            {overallRefundStatus === 'approved' ? (
+                              <span className="px-4 py-2 bg-green-100 text-green-800 font-semibold rounded-lg">
+                                Refund Approved
+                              </span>
+                            ) : overallRefundStatus === 'rejected' ? (
+                              <span className="px-4 py-2 bg-red-100 text-red-800 font-semibold rounded-lg">
+                                Refund Rejected
+                              </span>
+                            ) : overallRefundStatus === 'pending' ? (
                               <span className="px-4 py-2 bg-yellow-100 text-yellow-800 font-semibold rounded-lg">
                                 Refund Request In Progress
                               </span>
-                            ) : (
+                            ) : canRequestRefund ? (
                               <button
                                 onClick={() => openRefundModal(order)}
                                 className="px-4 py-2 bg-yellow-500 text-white font-semibold rounded-lg hover:bg-yellow-600 transition-colors"
+                                title={`${daysRemaining} ${daysRemaining === 1 ? 'day' : 'days'} remaining to request refund`}
                               >
-                                Request Refund
+                                Request Refund ({daysRemaining} {daysRemaining === 1 ? 'day' : 'days'} left)
                               </button>
+                            ) : (
+                              <span className="px-4 py-2 bg-gray-100 text-gray-600 font-semibold rounded-lg cursor-not-allowed">
+                                Refund Period Expired
+                              </span>
                             )}
                             {order.items.map((item) => (
                               <Link
@@ -598,6 +677,14 @@ export default function ProfilePage() {
                 <p className="text-sm text-gray-600 mt-1">
                   Select products from order {selectedOrder.order_number} to request a refund
                 </p>
+                {(() => {
+                  const daysRemaining = getDaysRemainingForRefund(selectedOrder.order_date);
+                  return daysRemaining > 0 ? (
+                    <p className="text-sm text-yellow-600 mt-2 font-medium">
+                      ⏰ {daysRemaining} {daysRemaining === 1 ? 'day' : 'days'} remaining to request a refund
+                    </p>
+                  ) : null;
+                })()}
               </div>
 
               <div className="p-6">
