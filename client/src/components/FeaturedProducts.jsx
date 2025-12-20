@@ -167,11 +167,20 @@ export default function FeaturedProducts() {
                         </svg>
                       </div>
                     )}
-                    {badgeInfo && (
+                    {/* Discount Badge - Priority */}
+                    {product.active_discount && product.active_discount.discount_rate > 0 && (
+                      <div className="absolute top-4 left-4 bg-red-500 text-white text-xs font-bold px-3 py-1.5 rounded-full z-20 shadow-md">
+                        {Math.round(product.active_discount.discount_rate)}% OFF
+                      </div>
+                    )}
+                    
+                    {/* Other Badges - Only show if no discount */}
+                    {!product.active_discount && badgeInfo && (
                       <div className={`absolute top-4 left-4 ${badgeInfo.color} text-white text-xs font-bold px-3 py-1 rounded-full`}>
                         {badgeInfo.text}
                       </div>
                     )}
+                    
                     <button
                       onClick={(e) => handleWishlistToggle(e, product._id, product.name)}
                       className={`absolute top-4 right-4 w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-md transition-opacity ${

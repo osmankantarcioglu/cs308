@@ -326,6 +326,13 @@ export default function ProductsPage() {
                     </div>
                   )}
                   
+                  {/* Discount Badge */}
+                  {product.active_discount && product.active_discount.discount_rate > 0 && (
+                    <div className="absolute top-4 left-4 bg-red-500 text-white text-xs font-bold px-3 py-1.5 rounded-full z-20 shadow-md">
+                      {Math.round(product.active_discount.discount_rate)}% OFF
+                    </div>
+                  )}
+                  
                   {/* Wishlist Button */}
                   <button
                     onClick={(e) => handleWishlistToggle(e, product._id, product.name)}
@@ -349,8 +356,13 @@ export default function ProductsPage() {
                     </svg>
                   </button>
                   
-                  {product.quantity === 0 && (
-                    <div className="absolute top-4 left-4 bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-full">
+                  {product.quantity === 0 && !product.active_discount && (
+                    <div className="absolute top-4 left-4 bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-full z-20">
+                      Out of Stock
+                    </div>
+                  )}
+                  {product.quantity === 0 && product.active_discount && (
+                    <div className="absolute top-12 left-4 bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-full z-20">
                       Out of Stock
                     </div>
                   )}

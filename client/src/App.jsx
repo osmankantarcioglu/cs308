@@ -28,6 +28,9 @@ import ProductManagerLoginPage from "./pages/ProductManagerLoginPage";
 import ProductManagerDashboard from "./pages/ProductManagerDashboard";
 import SupportAgentLoginPage from "./pages/SupportAgentLoginPage";
 import SupportAgentDashboard from "./pages/SupportAgentDashboard";
+import SalesManagerLoginPage from "./pages/SalesManagerLoginPage";
+import SalesManagerDashboard from "./pages/SalesManagerDashboard";
+import SalesManagerRoute from "./components/SalesManagerRoute";
 import AboutPage from "./pages/AboutPage";
 import PrivacyPolicyPage from "./pages/PrivacyPolicyPage";
 import TermsOfServicePage from "./pages/TermsOfServicePage";
@@ -74,6 +77,8 @@ export default function App() {
           <Route path="/admin/dashboard" element={<AdminRoute><AdminPage /></AdminRoute>} />
           <Route path="/product-manager" element={<ProductManagerLoginPage />} />
           <Route path="/product-manager/dashboard" element={<ProductManagerRoute><ProductManagerDashboard /></ProductManagerRoute>} />
+          <Route path="/sales-manager" element={<SalesManagerLoginPage />} />
+          <Route path="/sales-manager/dashboard" element={<SalesManagerRoute><SalesManagerDashboard /></SalesManagerRoute>} />
           <Route path="/support" element={<SupportAgentLoginPage />} />
           <Route path="/support/dashboard" element={<SupportAgentRoute><SupportAgentDashboard /></SupportAgentRoute>} />
             </Routes>
