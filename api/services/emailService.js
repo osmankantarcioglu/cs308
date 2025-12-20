@@ -140,6 +140,101 @@ async function sendInvoiceEmail(invoice, order, customer) {
 }
 
 /**
+ * Send discount notification email to users with products in wishlist
+ * @param {Object} user - User document
+ * @param {String} productNames - Comma-separated product names
+ * @param {Number} discountRate - Discount rate percentage
+ * @param {String} discountName - Name of the discount
+ * @returns {Promise<Object>} - Email send result
+ */
+async function sendDiscountNotification(user, productNames, discountRate, discountName) {
+    try {
+        if (!transporter) {
+            throw new Error('Email service not initialized. Please configure SMTP settings.');
+        }
+
+        const customerName = user.first_name && user.last_name
+            ? `${user.first_name} ${user.last_name}`
+            : user.email;
+
+        const mailOptions = {
+            from: process.env.SMTP_FROM || process.env.SMTP_USER || 'noreply@company.com',
+            to: user.email,
+            subject: `🎉 Special Discount Alert: ${discountRate}% OFF on Your Wishlist Items!`,
+            html: `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <style>
+                        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                        .header { background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+                        .content { padding: 30px; background-color: #f9fafb; }
+                        .discount-badge { display: inline-block; padding: 10px 20px; background-color: #10b981; color: white; border-radius: 5px; font-size: 24px; font-weight: bold; margin: 20px 0; }
+                        .product-list { background-color: white; padding: 20px; border-radius: 5px; margin: 20px 0; }
+                        .button { display: inline-block; padding: 12px 24px; background-color: #10b981; color: white; text-decoration: none; border-radius: 5px; margin: 20px 0; }
+                        .footer { padding: 20px; text-align: center; color: #666; font-size: 12px; }
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <div class="header">
+                            <h1>🎉 Special Discount Alert!</h1>
+                        </div>
+                        <div class="content">
+                            <p>Dear ${customerName},</p>
+                            <p>Great news! Items from your wishlist are now on sale!</p>
+                            <div style="text-align: center;">
+                                <div class="discount-badge">${discountRate}% OFF</div>
+                            </div>
+                            <div class="product-list">
+                                <h3>Discounted Products:</h3>
+                                <p>${productNames}</p>
+                            </div>
+                            <p><strong>Discount Name:</strong> ${discountName}</p>
+                            <p>Don't miss out on this amazing deal! Visit our store now to take advantage of these savings.</p>
+                            <div style="text-align: center;">
+                                <a href="${process.env.CLIENT_URL || 'http://localhost:5173'}" class="button">Shop Now</a>
+                            </div>
+                            <p>Best regards,<br>Your Company Team</p>
+                        </div>
+                        <div class="footer">
+                            <p>This is an automated email. Please do not reply to this message.</p>
+                        </div>
+                    </div>
+                </body>
+                </html>
+            `,
+            text: `
+                Special Discount Alert!
+               
+                Dear ${customerName},
+               
+                Great news! Items from your wishlist are now on sale!
+               
+                Discount: ${discountRate}% OFF
+                Discount Name: ${discountName}
+               
+                Discounted Products:
+                ${productNames}
+               
+                Don't miss out on this amazing deal! Visit our store now to take advantage of these savings.
+               
+                Best regards,
+                Your Company Team
+            `
+        };
+
+        const info = await transporter.sendMail(mailOptions);
+        console.log('Discount notification email sent:', info.messageId);
+        return info;
+    } catch (error) {
+        console.error('Error sending discount notification email:', error);
+        throw error;
+    }
+}
+
+/**
  * Verify email configuration
  * @returns {Promise<boolean>}
  */
@@ -158,6 +253,7 @@ async function verifyEmailConfig() {
 
 module.exports = {
     sendInvoiceEmail,
+    sendDiscountNotification,
     verifyEmailConfig,
     initializeEmailService
 };
