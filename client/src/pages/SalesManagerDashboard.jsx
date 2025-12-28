@@ -16,6 +16,12 @@ export default function SalesManagerDashboard() {
   // State for tabs
   const [activeTab, setActiveTab] = useState("discounts");
 
+  // Price management state
+  const [priceManagementProducts, setPriceManagementProducts] = useState([]);
+  const [priceManagementLoading, setPriceManagementLoading] = useState(true);
+  const [editingPrice, setEditingPrice] = useState(null);
+  const [newPrice, setNewPrice] = useState("");
+
   // Refund state
   const [refunds, setRefunds] = useState([]);
   const [refundsLoading, setRefundsLoading] = useState(true);
@@ -429,6 +435,78 @@ export default function SalesManagerDashboard() {
     );
   };
 
+  // Fetch products for price management
+  const fetchPriceManagementProducts = async () => {
+    if (!token) return;
+    setPriceManagementLoading(true);
+    setError("");
+    try {
+      const response = await authenticatedFetch(`${PRODUCTS_BASE}/management?limit=100`);
+      if (!response) return;
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || errorData.message || `Failed to load products (${response.status})`);
+      }
+      const data = await response.json();
+      if (data.success) {
+        setPriceManagementProducts(data.data.products || []);
+      } else {
+        throw new Error(data.error || data.message || "Failed to load products");
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setPriceManagementLoading(false);
+    }
+  };
+
+  // Start editing price
+  const handleStartEditPrice = (product) => {
+    setEditingPrice(product._id);
+    setNewPrice(product.price.toString());
+  };
+
+  // Cancel editing price
+  const handleCancelEditPrice = () => {
+    setEditingPrice(null);
+    setNewPrice("");
+  };
+
+  // Update product price
+  const handleUpdatePrice = async (productId) => {
+    const priceValue = parseFloat(newPrice);
+    if (isNaN(priceValue) || priceValue < 0) {
+      setError("Please enter a valid price (must be a positive number)");
+      return;
+    }
+
+    setError("");
+    try {
+      const response = await authenticatedFetch(`${PRODUCTS_BASE}/${productId}`, {
+        method: "PUT",
+        body: JSON.stringify({ price: priceValue }),
+      });
+
+      if (!response) return;
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to update price");
+      }
+
+      const data = await response.json();
+      if (data.success) {
+        setSuccess("Price updated successfully!");
+        setEditingPrice(null);
+        setNewPrice("");
+        fetchPriceManagementProducts();
+        fetchProducts(); // Also refresh discount products list
+        setTimeout(() => setSuccess(""), 5000);
+      }
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   // Effects
   useEffect(() => {
     if (activeTab === "discounts") {
@@ -440,6 +518,8 @@ export default function SalesManagerDashboard() {
       fetchAnalytics();
     } else if (activeTab === "refunds") {
       fetchRefunds();
+    } else if (activeTab === "prices") {
+      fetchPriceManagementProducts();
     }
   }, [activeTab, token]);
 
@@ -557,6 +637,7 @@ export default function SalesManagerDashboard() {
           <nav className="-mb-px flex space-x-8">
             {[
               { id: "discounts", label: "Discount Management" },
+              { id: "prices", label: "Price Management" },
               { id: "invoices", label: "Invoices" },
               { id: "refunds", label: "Refund Requests" },
               { id: "analytics", label: "Revenue & Analytics" },
@@ -1113,6 +1194,112 @@ export default function SalesManagerDashboard() {
                     </div>
                   )}
                 </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Price Management Tab */}
+        {activeTab === "prices" && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-lg shadow p-6">
+              <h2 className="text-xl font-semibold mb-4">Product Price Management</h2>
+              <p className="text-sm text-gray-600 mb-4">
+                Update product prices directly. You can also apply discounts from the Discount Management tab.
+              </p>
+              {priceManagementLoading ? (
+                <div className="text-gray-500">Loading products...</div>
+              ) : priceManagementProducts.length === 0 ? (
+                <div className="text-gray-500">No products found</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Product Name
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Current Price
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Status
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {priceManagementProducts.map((product) => (
+                        <tr key={product._id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm font-medium text-gray-900">{product.name}</div>
+                            {product.model && (
+                              <div className="text-sm text-gray-500">Model: {product.model}</div>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {editingPrice === product._id ? (
+                              <div className="flex items-center space-x-2">
+                                <span className="text-sm text-gray-500">$</span>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  value={newPrice}
+                                  onChange={(e) => setNewPrice(e.target.value)}
+                                  className="w-24 px-2 py-1 border border-gray-300 rounded-md focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                  autoFocus
+                                />
+                              </div>
+                            ) : (
+                              <div className="text-sm font-medium text-gray-900">
+                                ${product.price.toFixed(2)}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span
+                              className={`px-2 py-1 text-xs font-medium rounded-full ${
+                                product.is_active
+                                  ? "bg-green-100 text-green-800"
+                                  : "bg-gray-100 text-gray-800"
+                              }`}
+                            >
+                              {product.is_active ? "Active" : "Inactive"}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            {editingPrice === product._id ? (
+                              <div className="flex space-x-2">
+                                <button
+                                  onClick={() => handleUpdatePrice(product._id)}
+                                  className="text-green-600 hover:text-green-900 font-semibold"
+                                >
+                                  Save
+                                </button>
+                                <button
+                                  onClick={handleCancelEditPrice}
+                                  className="text-gray-600 hover:text-gray-900 font-semibold"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => handleStartEditPrice(product)}
+                                className="text-emerald-600 hover:text-emerald-900 font-semibold"
+                              >
+                                Edit Price
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
           </div>

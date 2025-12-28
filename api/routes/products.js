@@ -8,7 +8,7 @@ const Discount = require('../db/models/Discount');
 const Enum = require('../config/Enum');
 const { NotFoundError, ValidationError } = require('../lib/Error');
 const { authenticate, optionalAuthenticate } = require('../lib/auth');
-const { requireAdmin, requireAdminOrProductManager } = require('../lib/middleware');
+const { requireAdmin, requireAdminOrProductManager, requireAdminOrProductManagerOrSalesManager } = require('../lib/middleware');
 
 /**
  * @route   GET /products
@@ -193,10 +193,13 @@ router.get('/', async function(req, res, next) {
 /**
  * @route   GET /products/management
  * @desc    Get products for internal dashboards (includes inactive items)
- * @access  Admin or Product Manager
+ * @access  Admin, Product Manager, or Sales Manager
  */
-router.get('/management', authenticate, requireAdminOrProductManager, async function(req, res, next) {
+router.get('/management', authenticate, requireAdminOrProductManagerOrSalesManager, async function(req, res, next) {
     try {
+        // Debug log to verify middleware passed
+        console.log(`[Products Management] Access granted. User: ${req.user.email}, Role: ${req.user.role}`);
+        
         const {
             category,
             search,
@@ -329,8 +332,9 @@ router.post('/', authenticate, requireAdminOrProductManager, async function(req,
  * @route   PUT /products/:id
  * @desc    Update a product
  * @body    { name, description, quantity, price, ... }
+ * @access  Admin, Product Manager, or Sales Manager (Sales Manager can only update price)
  */
-router.put('/:id', authenticate, requireAdminOrProductManager, async function(req, res, next) {
+router.put('/:id', authenticate, requireAdminOrProductManagerOrSalesManager, async function(req, res, next) {
     try {
         const {
             name,
@@ -353,19 +357,39 @@ router.put('/:id', authenticate, requireAdminOrProductManager, async function(re
             throw new NotFoundError('Product not found');
         }
         
-        // Update fields
-        if (name !== undefined) product.name = name;
-        if (model !== undefined) product.model = model;
-        if (serial_number !== undefined) product.serial_number = serial_number;
-        if (description !== undefined) product.description = description;
-        if (quantity !== undefined) product.quantity = parseInt(quantity);
-        if (price !== undefined) product.price = parseFloat(price);
-        if (cost !== undefined) product.cost = parseFloat(cost);
-        if (warranty_status !== undefined) product.warranty_status = warranty_status;
-        if (distributor !== undefined) product.distributor = distributor;
-        if (category !== undefined) product.category = category;
-        if (images !== undefined && Array.isArray(images)) product.images = images;
-        if (is_active !== undefined) product.is_active = is_active;
+        // Sales managers can only update price
+        if (req.user.role === Enum.USER_ROLES.SALES_MANAGER) {
+            // Check if trying to update fields other than price
+            const allowedFields = ['price'];
+            const requestedFields = Object.keys(req.body).filter(key => req.body[key] !== undefined);
+            const disallowedFields = requestedFields.filter(field => !allowedFields.includes(field));
+            
+            if (disallowedFields.length > 0) {
+                throw new ValidationError(`Sales managers can only update product price. Attempted to update: ${disallowedFields.join(', ')}`);
+            }
+            
+            // Only update price
+            if (price !== undefined) {
+                if (price < 0) {
+                    throw new ValidationError('Price must be a positive number');
+                }
+                product.price = parseFloat(price);
+            }
+        } else {
+            // Admin and Product Manager can update all fields
+            if (name !== undefined) product.name = name;
+            if (model !== undefined) product.model = model;
+            if (serial_number !== undefined) product.serial_number = serial_number;
+            if (description !== undefined) product.description = description;
+            if (quantity !== undefined) product.quantity = parseInt(quantity);
+            if (price !== undefined) product.price = parseFloat(price);
+            if (cost !== undefined) product.cost = parseFloat(cost);
+            if (warranty_status !== undefined) product.warranty_status = warranty_status;
+            if (distributor !== undefined) product.distributor = distributor;
+            if (category !== undefined) product.category = category;
+            if (images !== undefined && Array.isArray(images)) product.images = images;
+            if (is_active !== undefined) product.is_active = is_active;
+        }
         
         // TODO: Get user from auth middleware
         // product.updated_by = req.user.id;
