@@ -37,9 +37,10 @@ const schema = mongoose.Schema({
     },
     cost: {
         type: Number,
+        required: true,
         default: function() {
-            // Default cost is 50% of sale price
-            return this.price * 0.5;
+            // Default cost is 50% of sale price if not provided
+            return this.price ? this.price * 0.5 : 0;
         },
         min: 0
     },

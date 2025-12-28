@@ -285,18 +285,27 @@ router.post('/', authenticate, requireAdminOrProductManager, async function(req,
             throw new ValidationError('Missing required fields: name, description, quantity, and price are required');
         }
         
+        // Cost is required - use provided cost or default to 50% of price
+        const productCost = cost !== undefined && cost !== null && cost !== '' 
+            ? parseFloat(cost) 
+            : parseFloat(price) * 0.5;
+        
+        if (productCost < 0) {
+            throw new ValidationError('Cost must be a positive number');
+        }
+        
         // Create product
         const productData = {
             name,
             description,
             quantity: parseInt(quantity),
-            price: parseFloat(price)
+            price: parseFloat(price),
+            cost: productCost
         };
         
         // Add optional fields if provided
         if (model) productData.model = model;
         if (serial_number) productData.serial_number = serial_number;
-        if (cost !== undefined) productData.cost = parseFloat(cost);
         if (warranty_status) productData.warranty_status = warranty_status;
         if (distributor) productData.distributor = distributor;
         if (category) productData.category = category;
@@ -382,8 +391,20 @@ router.put('/:id', authenticate, requireAdminOrProductManagerOrSalesManager, asy
             if (serial_number !== undefined) product.serial_number = serial_number;
             if (description !== undefined) product.description = description;
             if (quantity !== undefined) product.quantity = parseInt(quantity);
-            if (price !== undefined) product.price = parseFloat(price);
-            if (cost !== undefined) product.cost = parseFloat(cost);
+            if (price !== undefined) {
+                product.price = parseFloat(price);
+                // If cost is not being updated and price changed, update cost to maintain 50% default
+                if (cost === undefined && product.cost === product.price * 0.5) {
+                    product.cost = product.price * 0.5;
+                }
+            }
+            if (cost !== undefined) {
+                const newCost = parseFloat(cost);
+                if (newCost < 0) {
+                    throw new ValidationError('Cost must be a positive number');
+                }
+                product.cost = newCost;
+            }
             if (warranty_status !== undefined) product.warranty_status = warranty_status;
             if (distributor !== undefined) product.distributor = distributor;
             if (category !== undefined) product.category = category;

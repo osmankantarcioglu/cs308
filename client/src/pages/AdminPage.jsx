@@ -2201,7 +2201,7 @@ export default function AdminPage() {
                           rows="3"
                         />
                       </div>
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-3 gap-4">
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
                             Price *
@@ -2211,11 +2211,34 @@ export default function AdminPage() {
                             step="0.01"
                             required
                             value={productFormData.price}
+                            onChange={(e) => {
+                              const price = parseFloat(e.target.value) || 0;
+                              setProductFormData({ 
+                                ...productFormData, 
+                                price: price,
+                                // Auto-calculate cost as 50% of price if cost is 0 or not set
+                                cost: productFormData.cost === 0 ? price * 0.5 : productFormData.cost
+                              });
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Cost *
+                          </label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            required
+                            min="0"
+                            value={productFormData.cost}
                             onChange={(e) =>
-                              setProductFormData({ ...productFormData, price: parseFloat(e.target.value) || 0 })
+                              setProductFormData({ ...productFormData, cost: parseFloat(e.target.value) || 0 })
                             }
                             className="w-full px-3 py-2 border border-gray-300 rounded-md"
                           />
+                          <p className="text-xs text-gray-500 mt-1">Default: 50% of price</p>
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -2323,7 +2346,7 @@ export default function AdminPage() {
                           rows="3"
                         />
                       </div>
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-3 gap-4">
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
                             Price *
@@ -2333,11 +2356,34 @@ export default function AdminPage() {
                             step="0.01"
                             required
                             value={productFormData.price}
+                            onChange={(e) => {
+                              const price = parseFloat(e.target.value) || 0;
+                              setProductFormData({ 
+                                ...productFormData, 
+                                price: price,
+                                // Auto-calculate cost as 50% of price if cost is 0 or not set
+                                cost: productFormData.cost === 0 ? price * 0.5 : productFormData.cost
+                              });
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Cost *
+                          </label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            required
+                            min="0"
+                            value={productFormData.cost}
                             onChange={(e) =>
-                              setProductFormData({ ...productFormData, price: parseFloat(e.target.value) || 0 })
+                              setProductFormData({ ...productFormData, cost: parseFloat(e.target.value) || 0 })
                             }
                             className="w-full px-3 py-2 border border-gray-300 rounded-md"
                           />
+                          <p className="text-xs text-gray-500 mt-1">Default: 50% of price</p>
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">

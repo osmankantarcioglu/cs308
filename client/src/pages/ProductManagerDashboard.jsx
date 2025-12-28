@@ -68,6 +68,7 @@ export default function ProductManagerDashboard() {
     name: "",
     description: "",
     price: "",
+    cost: "",
     quantity: "",
     category: "",
     is_active: true,
@@ -433,6 +434,7 @@ export default function ProductManagerDashboard() {
         name: newProductForm.name,
         description: newProductForm.description,
         price: Number(newProductForm.price),
+        cost: newProductForm.cost ? Number(newProductForm.cost) : Number(newProductForm.price) * 0.5,
         quantity: Number(newProductForm.quantity),
         category: newProductForm.category || undefined,
         is_active: newProductForm.is_active,
@@ -465,6 +467,7 @@ export default function ProductManagerDashboard() {
         name: "",
         description: "",
         price: "",
+        cost: "",
         quantity: "",
         category: "",
         is_active: true,
@@ -1016,20 +1019,39 @@ export default function ProductManagerDashboard() {
                 onChange={(e) => setNewProductForm({ ...newProductForm, description: e.target.value })}
                 required
               />
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <input
                   type="number"
                   min="0"
-                  placeholder="Price"
+                  step="0.01"
+                  placeholder="Price *"
                   className="bg-slate-900/60 border border-white/5 rounded-2xl px-4 py-3 text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                   value={newProductForm.price}
-                  onChange={(e) => setNewProductForm({ ...newProductForm, price: e.target.value })}
+                  onChange={(e) => {
+                    const price = e.target.value;
+                    setNewProductForm({ 
+                      ...newProductForm, 
+                      price: price,
+                      // Auto-calculate cost as 50% of price if cost is empty
+                      cost: newProductForm.cost || (price ? (parseFloat(price) * 0.5).toFixed(2) : "")
+                    });
+                  }}
                   required
                 />
                 <input
                   type="number"
                   min="0"
-                  placeholder="Quantity"
+                  step="0.01"
+                  placeholder="Cost *"
+                  className="bg-slate-900/60 border border-white/5 rounded-2xl px-4 py-3 text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  value={newProductForm.cost}
+                  onChange={(e) => setNewProductForm({ ...newProductForm, cost: e.target.value })}
+                  required
+                />
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="Quantity *"
                   className="bg-slate-900/60 border border-white/5 rounded-2xl px-4 py-3 text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                   value={newProductForm.quantity}
                   onChange={(e) => setNewProductForm({ ...newProductForm, quantity: e.target.value })}

@@ -26,6 +26,10 @@ const schema = mongoose.Schema({
             type: Number,
             required: true
         },
+        cost_at_time: {
+            type: Number,
+            required: false // Optional for backward compatibility with existing orders
+        },
         total_price: {
             type: Number,
             required: true

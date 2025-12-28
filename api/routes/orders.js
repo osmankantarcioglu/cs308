@@ -279,10 +279,14 @@ router.post('/complete-order', authenticate, async function(req, res, next) {
             await Product.updateStock(freshProduct._id, item.quantity);
             console.log('Stock decreased for:', freshProduct.name, 'New stock:', freshProduct.quantity - item.quantity);
             
+            // Get cost at time of order (use product cost if available, otherwise 50% of price)
+            const costAtTime = freshProduct.cost || (item.price_at_time * 0.5);
+            
             orderItems.push({
                 product_id: freshProduct._id, // Use fresh product ID
                 quantity: item.quantity,
                 price_at_time: item.price_at_time,
+                cost_at_time: costAtTime, // Save cost at time of order
                 total_price: item.price_at_time * item.quantity
             });
         }

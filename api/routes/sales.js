@@ -57,17 +57,24 @@ router.get('/analytics', authenticate, requireAdminOrSalesManager, async functio
             let orderCost = 0;
 
             for (const item of order.items) {
-                const product = item.product_id;
-                if (product) {
-                    // Revenue is the price at time of order
-                    const itemRevenue = item.price_at_time * item.quantity;
-                    orderRevenue += itemRevenue;
+                // Revenue is the price at time of order
+                const itemRevenue = item.price_at_time * item.quantity;
+                orderRevenue += itemRevenue;
 
-                    // Cost: use product cost if available, otherwise default to 50% of sale price
-                    const productCost = product.cost || (item.price_at_time * 0.5);
-                    const itemCost = productCost * item.quantity;
-                    orderCost += itemCost;
+                // Cost: use cost_at_time if saved in order (for historical accuracy)
+                // Otherwise fallback to product.cost or 50% of price_at_time
+                let itemCostPerUnit;
+                if (item.cost_at_time !== undefined && item.cost_at_time !== null) {
+                    // Use the cost that was saved at the time of order
+                    itemCostPerUnit = item.cost_at_time;
+                } else {
+                    // Fallback for old orders that don't have cost_at_time
+                    const product = item.product_id;
+                    itemCostPerUnit = product?.cost || (item.price_at_time * 0.5);
                 }
+                
+                const itemCost = itemCostPerUnit * item.quantity;
+                orderCost += itemCost;
             }
 
             totalRevenue += orderRevenue;
