@@ -572,23 +572,36 @@ router.get('/:id/reviews', async function(req, res, next) {
             })
             .populate('customer_id', 'first_name last_name role')
             .sort({ createdAt: -1 }),
+            // Get all reviews that have a rating (rating is required and between 1-5)
             Review.find({
                 product_id: req.params.id,
-                rating: { $gte: 1 }
+                rating: { $exists: true, $ne: null, $gte: 1, $lte: 5 }
             }).select('rating')
         ]);
 
-        const reviewCount = allRatings.length;
-        const averageRating = reviewCount
-            ? Number((allRatings.reduce((sum, review) => sum + (review.rating || 0), 0) / reviewCount).toFixed(1))
-            : 0;
+        // Calculate total rating count (only count reviews that have valid ratings)
+        const ratingCount = allRatings.length;
+        
+        // Calculate average rating from all ratings
+        let averageRating = 0;
+        if (ratingCount > 0) {
+            const totalRating = allRatings.reduce((sum, review) => {
+                const rating = review.rating;
+                // Only count valid ratings (1-5)
+                if (rating && rating >= 1 && rating <= 5) {
+                    return sum + rating;
+                }
+                return sum;
+            }, 0);
+            averageRating = Number((totalRating / ratingCount).toFixed(1));
+        }
 
         res.json({
             success: true,
             data: {
                 reviews: visibleReviews,
-                reviewCount,
-                averageRating
+                reviewCount: ratingCount, // Total number of ratings (not comments)
+                averageRating: averageRating // Average of all ratings
             }
         });
     } catch (error) {
@@ -660,29 +673,19 @@ router.post('/:id/rating', authenticate, async function(req, res, next) {
             throw new ValidationError(deliveryCheck.reason);
         }
 
-        // Find or create review
-        let review = await Review.findOne({
+        // Create a new review for this rating (users can rate multiple times)
+        const review = await Review.create({
             product_id: req.params.id,
-            customer_id: req.user._id
+            customer_id: req.user._id,
+            order_id: deliveryCheck.order ? deliveryCheck.order._id : undefined,
+            rating: parsedRating,
+            // Rating is immediately visible, no approval needed
+            comment_status: Enum.REVIEW_STATUS.PENDING, // Default for when comment is added later
+            status: Enum.REVIEW_STATUS.PENDING, // For backward compatibility
+            is_visible: true, // Ratings are always visible
+            created_by: req.user._id,
+            updated_by: req.user._id
         });
-
-        if (review) {
-            review.rating = parsedRating;
-            review.order_id = deliveryCheck.order ? deliveryCheck.order._id : review.order_id;
-            review.updated_by = req.user._id;
-            await review.save();
-        } else {
-            review = await Review.create({
-                product_id: req.params.id,
-                customer_id: req.user._id,
-                order_id: deliveryCheck.order ? deliveryCheck.order._id : undefined,
-                rating: parsedRating,
-                comment_status: Enum.REVIEW_STATUS.PENDING, // Default for when comment is added later
-                status: Enum.REVIEW_STATUS.PENDING, // For backward compatibility
-                created_by: req.user._id,
-                updated_by: req.user._id
-            });
-        }
 
         res.status(201).json({
             success: true,
@@ -690,10 +693,10 @@ router.post('/:id/rating', authenticate, async function(req, res, next) {
             data: review
         });
     } catch (error) {
-        if (error.code === 11000) {
-            next(new ValidationError('You have already submitted a rating for this product.'));
-        } else if (error.name === 'CastError') {
+        if (error.name === 'CastError') {
             next(new NotFoundError('Invalid product ID'));
+        } else if (error.name === 'ValidationError') {
+            next(error);
         } else {
             next(error);
         }
@@ -725,34 +728,19 @@ router.post('/:id/reviews', authenticate, async function(req, res, next) {
             throw new ValidationError(deliveryCheck.reason);
         }
 
-        // Find or create review
-        let review = await Review.findOne({
+        // Create a new review for this comment (users can comment multiple times)
+        // Each comment needs approval before being visible
+        const review = await Review.create({
             product_id: req.params.id,
-            customer_id: req.user._id
+            customer_id: req.user._id,
+            order_id: deliveryCheck.order ? deliveryCheck.order._id : undefined,
+            comment: trimmedComment,
+            comment_status: Enum.REVIEW_STATUS.PENDING, // Comment needs approval
+            status: Enum.REVIEW_STATUS.PENDING, // For backward compatibility
+            is_visible: false, // Comment not visible until approved
+            created_by: req.user._id,
+            updated_by: req.user._id
         });
-
-        if (review) {
-            review.comment = trimmedComment;
-            review.comment_status = Enum.REVIEW_STATUS.PENDING; // Comment needs approval
-            review.status = Enum.REVIEW_STATUS.PENDING; // For backward compatibility
-            review.is_visible = false; // Comment not visible until approved
-            review.order_id = deliveryCheck.order ? deliveryCheck.order._id : review.order_id;
-            review.updated_by = req.user._id;
-            await review.save();
-        } else {
-            // Create a new review with just a comment (rating is optional)
-            review = await Review.create({
-                product_id: req.params.id,
-                customer_id: req.user._id,
-                order_id: deliveryCheck.order ? deliveryCheck.order._id : undefined,
-                comment: trimmedComment,
-                comment_status: Enum.REVIEW_STATUS.PENDING, // Comment needs approval
-                status: Enum.REVIEW_STATUS.PENDING, // For backward compatibility
-                is_visible: false, // Comment not visible until approved
-                created_by: req.user._id,
-                updated_by: req.user._id
-            });
-        }
 
         res.status(201).json({
             success: true,
@@ -760,10 +748,10 @@ router.post('/:id/reviews', authenticate, async function(req, res, next) {
             data: review
         });
     } catch (error) {
-        if (error.code === 11000) {
-            next(new ValidationError('You have already submitted a comment for this product.'));
-        } else if (error.name === 'CastError') {
+        if (error.name === 'CastError') {
             next(new NotFoundError('Invalid product ID'));
+        } else if (error.name === 'ValidationError') {
+            next(error);
         } else {
             next(error);
         }

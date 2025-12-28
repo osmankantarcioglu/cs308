@@ -95,6 +95,14 @@ function onListening() {
   db.connect(config.DB)
     .then(async () => {
       console.log('Database connected successfully');
+      // Remove unique constraint from reviews index (allow multiple reviews per user per product)
+      try {
+        const { removeUniqueReviewIndex } = require('../lib/bootstrap');
+        await removeUniqueReviewIndex();
+      } catch (error) {
+        console.error('Failed to remove unique review index:', error.message);
+        // Don't exit - allow server to continue running
+      }
       // Ensure admin user exists (both local and deployment)
       try {
         const { ensureAdminUser } = require('../lib/bootstrap');

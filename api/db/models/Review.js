@@ -81,8 +81,8 @@ schema.index({ status: 1 });
 schema.index({ comment_status: 1 });
 schema.index({ is_visible: 1 });
 
-// Compound index to ensure one review per product per customer
-schema.index({ product_id: 1, customer_id: 1 }, { unique: true });
+// Compound index for faster queries (NOT unique - users can have multiple reviews per product)
+schema.index({ product_id: 1, customer_id: 1 });
 
 // Pre-save hook to sync status with comment_status for backward compatibility
 schema.pre('save', function(next) {

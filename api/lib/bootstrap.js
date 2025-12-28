@@ -1,5 +1,7 @@
 const bcrypt = require('bcryptjs');
+const mongoose = require('mongoose');
 const Users = require('../db/models/Users');
+const Review = require('../db/models/Review');
 const Enum = require('../config/Enum');
 
 /**
@@ -60,7 +62,47 @@ const ensureAdminUser = async () => {
     }
 };
 
+/**
+ * Removes the unique constraint from the reviews collection index
+ * This allows users to submit multiple reviews/ratings for the same product
+ */
+const removeUniqueReviewIndex = async () => {
+    try {
+        const db = mongoose.connection.db;
+        const collection = db.collection('reviews');
+        
+        // Get all indexes
+        const indexes = await collection.indexes();
+        
+        // Find the unique index on product_id and customer_id
+        const uniqueIndex = indexes.find(index => 
+            index.name === 'product_id_1_customer_id_1' && index.unique === true
+        );
+        
+        if (uniqueIndex) {
+            console.log('🔄 Removing unique constraint from reviews index...');
+            await collection.dropIndex('product_id_1_customer_id_1');
+            console.log('✅ Unique constraint removed successfully');
+            
+            // Recreate the index without unique constraint (for performance)
+            await collection.createIndex({ product_id: 1, customer_id: 1 });
+            console.log('✅ Non-unique index recreated for performance');
+        } else {
+            console.log('✅ Reviews index is already non-unique');
+        }
+    } catch (error) {
+        // If index doesn't exist or already dropped, that's fine
+        if (error.code === 27 || error.codeName === 'IndexNotFound') {
+            console.log('✅ Reviews unique index does not exist (already removed)');
+        } else {
+            console.error('⚠️  Warning: Could not remove unique index:', error.message);
+            // Don't throw - allow server to continue
+        }
+    }
+};
+
 module.exports = {
-    ensureAdminUser
+    ensureAdminUser,
+    removeUniqueReviewIndex
 };
 

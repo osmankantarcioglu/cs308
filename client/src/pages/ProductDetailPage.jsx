@@ -644,7 +644,7 @@ export default function ProductDetailPage() {
                   {(reviewStats.averageRating ?? 0).toFixed(1)}
                 </div>
                 <p className="text-sm text-gray-500">
-                  {reviewStats.reviewCount} review{reviewStats.reviewCount === 1 ? "" : "s"}
+                  {reviewStats.reviewCount} rating{reviewStats.reviewCount === 1 ? "" : "s"}
                 </p>
               </div>
               {renderStars(reviewStats.averageRating ?? 0)}
