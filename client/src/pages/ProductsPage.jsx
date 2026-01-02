@@ -3,6 +3,8 @@ import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
 import { useWishlist } from "../context/WishlistContext";
+import { useCompare } from "../context/CompareContext";
+
 
 const API_BASE_URL = "http://localhost:3000/products";
 const CATEGORIES_API_URL = "http://localhost:3000/categories";
@@ -20,7 +22,9 @@ export default function ProductsPage() {
   const [sortBy, setSortBy] = useState(""); // "price_asc", "price_desc", "popularity"
   const { isAuthenticated } = useAuth();
   const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
-  
+  const { toggle, isSelected, items, MAX_COMPARE } = useCompare();
+
+
   // Update search term and category when URL changes (from Navbar)
   useEffect(() => {
     const urlSearchTerm = searchParams.get("q") || "";
@@ -121,6 +125,11 @@ export default function ProductsPage() {
 
   const handleSelectProduct = (productId) => {
     navigate(`/products/${productId}`);
+  };
+
+  const handleCompareToggle = (e, product) => {
+    e.stopPropagation();
+    toggle(product);
   };
 
   const handleWishlistToggle = async (e, productId, productName) => {
@@ -406,6 +415,26 @@ export default function ProductsPage() {
                     <span className="text-2xl font-bold text-gray-900">
                       ${product.price ? product.price.toFixed(2) : "0.00"}
                     </span>
+                  </div>
+                  <div data-compare="true" className="flex items-center justify-between mb-2">
+                  <label
+                    className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-primary"
+                      checked={isSelected(product._id)}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => handleCompareToggle(e, product)}
+                      disabled={!isSelected(product._id) && items.length >= MAX_COMPARE}
+                    />
+                    Compare
+                  </label>
+
+                  {!isSelected(product._id) && items.length >= MAX_COMPARE && (
+                    <span className="text-xs text-gray-400">Max {MAX_COMPARE}</span>
+                  )}
                   </div>
                   <div className="mt-4">
                     <span className="inline-flex items-center px-3 py-1 text-sm font-medium text-primary bg-primary/10 rounded-full">
