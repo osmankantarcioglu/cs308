@@ -7,6 +7,8 @@ const { authenticate } = require('../lib/auth');
 const { requireAdmin } = require('../lib/middleware');
 const Enum = require('../config/Enum');
 const bcrypt = require('bcryptjs');
+const Coupon = require("../db/models/Coupon");
+
 
 // All admin routes require authentication and admin role
 router.use(authenticate);
@@ -551,6 +553,69 @@ router.get('/stats', async (req, res, next) => {
     }
 });
 
+/**
+ * GET /admin/coupons
+ */
+router.get("/coupons", async (req, res, next) => {
+    try {
+      const coupons = await Coupon.find().sort({ createdAt: -1 }).lean();
+      res.json({ success: true, data: coupons });
+    } catch (err) {
+      next(err);
+    }
+  });
+  
+  /**
+   * POST /admin/coupons
+   */
+  router.post("/coupons", async (req, res, next) => {
+    try {
+      const { code, discount_rate, min_subtotal, expires_at, is_active } = req.body;
+  
+      const created = await Coupon.create({
+        code: String(code || "").trim().toUpperCase(),
+        discount_rate: Number(discount_rate),
+        min_subtotal: Number(min_subtotal || 0),
+        expires_at: expires_at ? new Date(expires_at) : null,
+        is_active: is_active !== undefined ? Boolean(is_active) : true,
+      });
+  
+      res.json({ success: true, data: created });
+    } catch (err) {
+      next(err);
+    }
+  });
+  
+  /**
+   * PATCH /admin/coupons/:id
+   */
+  router.patch("/coupons/:id", async (req, res, next) => {
+    try {
+      const updates = { ...req.body };
+      if (updates.code) updates.code = String(updates.code).trim().toUpperCase();
+      if (updates.discount_rate !== undefined) updates.discount_rate = Number(updates.discount_rate);
+      if (updates.min_subtotal !== undefined) updates.min_subtotal = Number(updates.min_subtotal);
+      if (updates.expires_at === "") updates.expires_at = null;
+  
+      const updated = await Coupon.findByIdAndUpdate(req.params.id, updates, { new: true });
+      res.json({ success: true, data: updated });
+    } catch (err) {
+      next(err);
+    }
+  });
+  
+  /**
+   * DELETE /admin/coupons/:id
+   */
+  router.delete("/coupons/:id", async (req, res, next) => {
+    try {
+      await Coupon.findByIdAndDelete(req.params.id);
+      res.json({ success: true });
+    } catch (err) {
+      next(err);
+    }
+  });
+  
 
 module.exports = router;
 

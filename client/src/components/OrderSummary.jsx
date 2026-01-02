@@ -1,12 +1,156 @@
+import { useEffect, useMemo, useState } from "react";
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
+
 export default function OrderSummary({ items, onCheckout }) {
-  const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const shipping = subtotal > 100 ? 0 : 15;
-  const tax = subtotal * 0.08; // 8% tax
-  const total = subtotal + shipping + tax;
+  const subtotal = useMemo(
+    () => items.reduce((sum, item) => sum + item.price * item.quantity, 0),
+    [items]
+  );
+
+  // Coupon state
+  const [code, setCode] = useState("");
+  const [coupon, setCoupon] = useState(null); // { code, discount_rate, discount_amount }
+  const [msg, setMsg] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  // Load saved coupon 
+  useEffect(() => {
+    const saved = localStorage.getItem("appliedCoupon");
+    if (!saved) return;
+    try {
+      const parsed = JSON.parse(saved);
+      if (parsed?.code) {
+        setCoupon(parsed);
+        setCode(parsed.code);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  // Revalidate saved coupon when subtotal changes
+  useEffect(() => {
+    if (!coupon?.code) return;
+
+    (async () => {
+      try {
+        const r = await fetch(
+          `${API_BASE_URL}/coupons/validate?code=${encodeURIComponent(
+            coupon.code
+          )}&subtotal=${subtotal}`
+        );
+        const data = await r.json();
+
+        if (data?.valid) {
+          const updated = {
+            code: data.coupon.code,
+            discount_rate: data.coupon.discount_rate,
+            discount_amount: data.discount_amount,
+          };
+          setCoupon(updated);
+          localStorage.setItem("appliedCoupon", JSON.stringify(updated));
+        } else {
+          setCoupon(null);
+          localStorage.removeItem("appliedCoupon");
+        }
+      } catch {
+        // ignore
+      }
+    })();
+  }, [subtotal]);
+
+  const discountAmount = coupon?.discount_amount ? Number(coupon.discount_amount) : 0;
+  const discountedSubtotal = Math.max(0, subtotal - discountAmount);
+
+  // Recompute based on discounted subtotal
+  const shipping = discountedSubtotal > 100 ? 0 : 15;
+  const tax = (discountedSubtotal + shipping) * 0.08; // 8% tax
+  const total = discountedSubtotal + shipping + tax;
+
+  const applyCoupon = async () => {
+    setMsg("");
+    const trimmed = code.trim();
+    if (!trimmed) return;
+
+    setLoading(true);
+    try {
+      const r = await fetch(
+        `${API_BASE_URL}/coupons/validate?code=${encodeURIComponent(
+          trimmed
+        )}&subtotal=${subtotal}`
+      );
+      const data = await r.json();
+
+      if (data?.valid) {
+        const applied = {
+          code: data.coupon.code,
+          discount_rate: data.coupon.discount_rate,
+          discount_amount: data.discount_amount,
+        };
+        setCoupon(applied);
+        localStorage.setItem("appliedCoupon", JSON.stringify(applied));
+        setMsg(`Applied ${applied.code} ✅`);
+      } else {
+        setCoupon(null);
+        localStorage.removeItem("appliedCoupon");
+        setMsg(data?.message || "Invalid coupon code.");
+      }
+    } catch (e) {
+      setMsg("Could not validate coupon. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const removeCoupon = () => {
+    setCoupon(null);
+    setCode("");
+    setMsg("");
+    localStorage.removeItem("appliedCoupon");
+  };
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-6 sticky top-24">
       <h2 className="text-xl font-bold text-gray-900 mb-6">Order Summary</h2>
+
+      {/* Coupon */}
+      <div className="mb-6">
+        <div className="text-sm font-semibold text-gray-900 mb-2">Coupon / Discount code</div>
+        <div className="flex gap-2">
+          <input
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            placeholder="Enter code (e.g. WELCOME10)"
+            className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+          />
+
+          {!coupon ? (
+            <button
+              onClick={applyCoupon}
+              disabled={loading || !code.trim()}
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+            >
+              {loading ? "Checking..." : "Apply"}
+            </button>
+          ) : (
+            <button
+              onClick={removeCoupon}
+              className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+            >
+              Remove
+            </button>
+          )}
+        </div>
+
+        {msg && <div className="mt-2 text-xs text-gray-600">{msg}</div>}
+
+        {coupon && (
+          <div className="mt-2 text-xs text-green-700">
+            {coupon.code} ({coupon.discount_rate}% off) applied
+          </div>
+        )}
+      </div>
 
       {/* Summary Items */}
       <div className="space-y-3 mb-6">
@@ -14,6 +158,14 @@ export default function OrderSummary({ items, onCheckout }) {
           <span>Subtotal</span>
           <span className="font-medium">${subtotal.toFixed(2)}</span>
         </div>
+
+        {coupon && (
+          <div className="flex justify-between text-green-700">
+            <span>Discount ({coupon.code})</span>
+            <span className="font-semibold">-${discountAmount.toFixed(2)}</span>
+          </div>
+        )}
+
         <div className="flex justify-between text-gray-600">
           <span>Shipping</span>
           <span className="font-medium">
@@ -24,11 +176,12 @@ export default function OrderSummary({ items, onCheckout }) {
             )}
           </span>
         </div>
+
         <div className="flex justify-between text-gray-600">
           <span>Tax</span>
           <span className="font-medium">${tax.toFixed(2)}</span>
         </div>
-        
+
         <div className="border-t border-gray-200 pt-3 mt-3">
           <div className="flex justify-between text-lg font-bold text-gray-900">
             <span>Total</span>
@@ -41,7 +194,11 @@ export default function OrderSummary({ items, onCheckout }) {
       {shipping > 0 && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-6">
           <p className="text-sm text-blue-800">
-            Add <span className="font-semibold">${(100 - subtotal).toFixed(2)}</span> more to get FREE shipping! 🚚
+            Add{" "}
+            <span className="font-semibold">
+              ${(100 - discountedSubtotal).toFixed(2)}
+            </span>{" "}
+            more to get FREE shipping! 🚚
           </p>
         </div>
       )}

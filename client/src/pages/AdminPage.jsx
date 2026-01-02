@@ -1,6 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-
 const API_BASE_URL = "http://localhost:3000";
 
 // Get auth token from localStorage
@@ -16,9 +15,407 @@ const USER_ROLES = {
   SUPPORT_AGENT: "support_agent",
 };
 
+
+function CouponsPanel({ token }) {
+  const [coupons, setCoupons] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Filters (match Products tab layout)
+  const [couponSearchTerm, setCouponSearchTerm] = useState("");
+  const [couponStatusFilter, setCouponStatusFilter] = useState("");
+
+  // Modal
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(null);
+
+  const [form, setForm] = useState({
+    code: "",
+    discount_rate: 10,
+    min_subtotal: 0,
+    expires_at: "",
+    is_active: true,
+  });
+
+  const headers = useMemo(
+    () => ({
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    }),
+    [token]
+  );
+
+  const fetchCoupons = async () => {
+    setLoading(true);
+    try {
+      const r = await fetch(`${API_BASE_URL}/admin/coupons`, { headers });
+      const data = await r.json();
+      setCoupons(data?.data || []);
+    } catch (e) {
+      console.error("Fetch coupons error:", e);
+      setCoupons([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchCoupons();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const openCreate = () => {
+    setEditing(null);
+    setForm({
+      code: "",
+      discount_rate: 10,
+      min_subtotal: 0,
+      expires_at: "",
+      is_active: true,
+    });
+    setOpen(true);
+  };
+
+  const openEdit = (c) => {
+    setEditing(c);
+    setForm({
+      code: c.code || "",
+      discount_rate: c.discount_rate ?? 10,
+      min_subtotal: c.min_subtotal ?? 0,
+      expires_at: c.expires_at ? String(c.expires_at).slice(0, 10) : "",
+      is_active: !!c.is_active,
+    });
+    setOpen(true);
+  };
+
+  const save = async () => {
+    const payload = {
+      code: String(form.code || "").trim().toUpperCase(),
+      discount_rate: Number(form.discount_rate),
+      min_subtotal: Number(form.min_subtotal || 0),
+      expires_at: form.expires_at ? form.expires_at : null,
+      is_active: !!form.is_active,
+    };
+
+    if (!payload.code) return alert("Coupon code is required.");
+    if (!Number.isFinite(payload.discount_rate) || payload.discount_rate < 1 || payload.discount_rate > 90) {
+      return alert("Discount rate must be between 1 and 90.");
+    }
+    if (!Number.isFinite(payload.min_subtotal) || payload.min_subtotal < 0) {
+      return alert("Min subtotal must be >= 0.");
+    }
+
+    try {
+      if (editing?._id) {
+        await fetch(`${API_BASE_URL}/admin/coupons/${editing._id}`, {
+          method: "PATCH",
+          headers,
+          body: JSON.stringify(payload),
+        });
+      } else {
+        await fetch(`${API_BASE_URL}/admin/coupons`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(payload),
+        });
+      }
+
+      setOpen(false);
+      await fetchCoupons();
+    } catch (e) {
+      console.error("Save coupon error:", e);
+      alert("Could not save coupon.");
+    }
+  };
+
+  const removeCoupon = async (id) => {
+    if (!confirm("Delete this coupon?")) return;
+    try {
+      await fetch(`${API_BASE_URL}/admin/coupons/${id}`, {
+        method: "DELETE",
+        headers,
+      });
+      await fetchCoupons();
+    } catch (e) {
+      console.error("Delete coupon error:", e);
+      alert("Could not delete coupon.");
+    }
+  };
+
+  const toggleActive = async (c) => {
+    try {
+      await fetch(`${API_BASE_URL}/admin/coupons/${c._id}`, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({ is_active: !c.is_active }),
+      });
+      await fetchCoupons();
+    } catch (e) {
+      console.error("Toggle coupon error:", e);
+      alert("Could not update coupon.");
+    }
+  };
+
+  const filteredCoupons = useMemo(() => {
+    const q = couponSearchTerm.trim().toLowerCase();
+    return (coupons || []).filter((c) => {
+      const expired = c.expires_at && new Date(c.expires_at) < new Date();
+      const statusOk =
+        couponStatusFilter === ""
+          ? true
+          : couponStatusFilter === "active"
+          ? !expired && !!c.is_active
+          : couponStatusFilter === "inactive"
+          ? !expired && !c.is_active
+          : couponStatusFilter === "expired"
+          ? !!expired
+          : true;
+
+      const searchOk = !q ? true : String(c.code || "").toLowerCase().includes(q);
+      return statusOk && searchOk;
+    });
+  }, [coupons, couponSearchTerm, couponStatusFilter]);
+
+  if (loading) {
+    return <div className="bg-white rounded-lg shadow p-6">Loading coupons...</div>;
+  }
+
+  return (
+    <>
+      {/* Filters (same layout as Products tab) */}
+      <div className="bg-white rounded-lg shadow p-6 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
+            <input
+              type="text"
+              placeholder="Search by coupon code..."
+              value={couponSearchTerm}
+              onChange={(e) => setCouponSearchTerm(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+            <select
+              value={couponStatusFilter}
+              onChange={(e) => setCouponStatusFilter(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">All Status</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+              <option value="expired">Expired</option>
+            </select>
+          </div>
+
+          <div className="flex items-end">
+            <button
+              onClick={openCreate}
+              className="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
+            >
+              Add New Coupon
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Coupons Table (same styling as Products tab) */}
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Code
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Discount
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Min Subtotal
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Expires
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Status
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+
+            <tbody className="bg-white divide-y divide-gray-200">
+              {filteredCoupons.map((c) => {
+                const expired = c.expires_at && new Date(c.expires_at) < new Date();
+                const statusText = expired ? "Expired" : c.is_active ? "Active" : "Inactive";
+
+                const statusClass = expired
+                  ? "bg-gray-100 text-gray-800"
+                  : c.is_active
+                  ? "bg-green-100 text-green-800"
+                  : "bg-red-100 text-red-800";
+
+                return (
+                  <tr key={c._id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-gray-900">{c.code}</div>
+                    </td>
+
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">{Number(c.discount_rate || 0)}%</div>
+                    </td>
+
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">
+                        ${Number(c.min_subtotal || 0).toFixed(2)}
+                      </div>
+                    </td>
+
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-500">
+                        {c.expires_at ? String(c.expires_at).slice(0, 10) : "-"}
+                      </div>
+                    </td>
+
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusClass}`}>
+                        {statusText}
+                      </span>
+                    </td>
+
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                      <button onClick={() => openEdit(c)} className="text-blue-600 hover:text-blue-900">
+                        Edit
+                      </button>
+
+                      {!expired && (
+                        <button
+                          onClick={() => toggleActive(c)}
+                          className={c.is_active ? "text-red-600 hover:text-red-900" : "text-green-600 hover:text-green-900"}
+                        >
+                          {c.is_active ? "Deactivate" : "Activate"}
+                        </button>
+                      )}
+
+                      <button
+                        onClick={() => removeCoupon(c._id)}
+                        className="text-red-800 hover:text-red-900 font-bold"
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+
+              {filteredCoupons.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-6 py-10 text-center text-gray-500">
+                    No coupons found.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Modal (keep simple, align to existing modal style) */}
+      {open && (
+        <div className="fixed inset-0 bg-gray-200/40 backdrop-blur-[2px] flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-2xl p-6 relative max-w-lg w-full mx-4">
+            <h2 className="text-xl font-bold mb-4">{editing ? "Edit Coupon" : "Add Coupon"}</h2>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Code</label>
+                <input
+                  value={form.code}
+                  onChange={(e) => setForm((s) => ({ ...s, code: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  placeholder="WELCOME10"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Discount %</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={90}
+                    value={form.discount_rate}
+                    onChange={(e) => setForm((s) => ({ ...s, discount_rate: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Min Subtotal ($)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={form.min_subtotal}
+                    onChange={(e) => setForm((s) => ({ ...s, min_subtotal: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Expires At</label>
+                  <input
+                    type="date"
+                    value={form.expires_at}
+                    onChange={(e) => setForm((s) => ({ ...s, expires_at: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  />
+                </div>
+
+                <div className="flex items-center mt-6 md:mt-0">
+                  <input
+                    type="checkbox"
+                    checked={form.is_active}
+                    onChange={(e) => setForm((s) => ({ ...s, is_active: e.target.checked }))}
+                    className="mr-2"
+                  />
+                  <label className="text-sm font-medium text-gray-700">Active</label>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end space-x-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  setEditing(null);
+                }}
+                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={save}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 export default function AdminPage() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState("users"); // "users", "categories", "products", or "orders"
+  const [activeTab, setActiveTab] = useState("users"); // "users", "categories", "products", or "coupons"
   
   // Users state
   const [users, setUsers] = useState([]);
@@ -923,6 +1320,7 @@ export default function AdminPage() {
             >
               Users
             </button>
+
             <button
               onClick={() => setActiveTab("categories")}
               className={`py-4 px-1 border-b-2 font-medium text-sm ${
@@ -933,6 +1331,7 @@ export default function AdminPage() {
             >
               Categories
             </button>
+
             <button
               onClick={() => setActiveTab("products")}
               className={`py-4 px-1 border-b-2 font-medium text-sm ${
@@ -943,10 +1342,20 @@ export default function AdminPage() {
             >
               Products
             </button>
+
+            <button
+              onClick={() => setActiveTab("coupons")}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === "coupons"
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
+            >
+              Coupons
+            </button>
           </nav>
         </div>
-
-        {/* Users Tab */}
+{/* Users Tab */}
         {activeTab === "users" && (
           <>
         {/* Filters */}
@@ -1164,8 +1573,8 @@ export default function AdminPage() {
 
         {/* Add User Modal */}
         {showAddModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
+          <div className="fixed inset-0 bg-gray-200/40 backdrop-blur-[2px] flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl shadow-2xl p-6 relative max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
               <h2 className="text-xl font-bold mb-4">Add New User</h2>
               <form onSubmit={handleAddUser}>
                 <div className="space-y-4">
@@ -1314,8 +1723,8 @@ export default function AdminPage() {
 
         {/* Edit User Modal */}
         {showEditModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
+          <div className="fixed inset-0 bg-gray-200/40 backdrop-blur-[2px] flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl shadow-2xl p-6 relative max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
               <h2 className="text-xl font-bold mb-4">Edit User</h2>
               <form onSubmit={handleEditUser}>
                 <div className="space-y-4">
@@ -1464,8 +1873,8 @@ export default function AdminPage() {
 
         {/* Delete Confirmation Modal */}
         {showDeleteModal && selectedUser && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+          <div className="fixed inset-0 bg-gray-200/40 backdrop-blur-[2px] flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl shadow-2xl p-6 relative max-w-md w-full mx-4">
               <h2 className="text-xl font-bold mb-4">Confirm Deactivation</h2>
               <p className="text-gray-600 mb-6">
                 Are you sure you want to deactivate {selectedUser.first_name}{" "}
@@ -1495,8 +1904,8 @@ export default function AdminPage() {
 
         {/* Hard Delete User Confirmation Modal */}
         {showHardDeleteUserModal && selectedUser && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+          <div className="fixed inset-0 bg-gray-200/40 backdrop-blur-[2px] flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl shadow-2xl p-6 relative max-w-md w-full mx-4">
               <h2 className="text-xl font-bold mb-4 text-red-600">⚠️ Permanent Delete</h2>
               <p className="text-gray-600 mb-6">
                 Are you sure you want to <strong>permanently delete</strong> {selectedUser.first_name}{" "}
@@ -1712,8 +2121,8 @@ export default function AdminPage() {
 
             {/* Add Category Modal */}
             {showAddCategoryModal && (
-              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
+              <div className="fixed inset-0 bg-gray-200/40 backdrop-blur-[2px] flex items-center justify-center z-50">
+                <div className="bg-white rounded-xl shadow-2xl p-6 relative max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
                   <h2 className="text-xl font-bold mb-4">Add New Category</h2>
                   <form onSubmit={handleAddCategory}>
                     <div className="space-y-4">
@@ -1802,8 +2211,8 @@ export default function AdminPage() {
 
             {/* Edit Category Modal */}
             {showEditCategoryModal && (
-              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
+              <div className="fixed inset-0 bg-gray-200/40 backdrop-blur-[2px] flex items-center justify-center z-50">
+                <div className="bg-white rounded-xl shadow-2xl p-6 relative max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
                   <h2 className="text-xl font-bold mb-4">Edit Category</h2>
                   <form onSubmit={handleEditCategory}>
                     <div className="space-y-4">
@@ -1893,8 +2302,8 @@ export default function AdminPage() {
 
             {/* Delete Category Confirmation Modal */}
             {showDeleteCategoryModal && selectedCategory && (
-              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+              <div className="fixed inset-0 bg-gray-200/40 backdrop-blur-[2px] flex items-center justify-center z-50">
+                <div className="bg-white rounded-xl shadow-2xl p-6 relative max-w-md w-full mx-4">
                   <h2 className="text-xl font-bold mb-4">Confirm Deactivation</h2>
                   <p className="text-gray-600 mb-6">
                     Are you sure you want to deactivate "{selectedCategory.name}"? This action can
@@ -1923,8 +2332,8 @@ export default function AdminPage() {
 
             {/* Hard Delete Category Confirmation Modal */}
             {showHardDeleteCategoryModal && selectedCategory && (
-              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+              <div className="fixed inset-0 bg-gray-200/40 backdrop-blur-[2px] flex items-center justify-center z-50">
+                <div className="bg-white rounded-xl shadow-2xl p-6 relative max-w-md w-full mx-4">
                   <h2 className="text-xl font-bold mb-4 text-red-600">⚠️ Permanent Delete</h2>
                   <p className="text-gray-600 mb-6">
                     Are you sure you want to <strong>permanently delete</strong> "{selectedCategory.name}"? 
@@ -2168,8 +2577,8 @@ export default function AdminPage() {
 
             {/* Add Product Modal */}
             {showAddProductModal && (
-              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
+              <div className="fixed inset-0 bg-gray-200/40 backdrop-blur-[2px] flex items-center justify-center z-50">
+                <div className="bg-white rounded-xl shadow-2xl p-6 relative max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
                   <h2 className="text-xl font-bold mb-4">Add New Product</h2>
                   <form onSubmit={handleAddProduct}>
                     <div className="space-y-4">
@@ -2313,8 +2722,8 @@ export default function AdminPage() {
 
             {/* Edit Product Modal */}
             {showEditProductModal && (
-              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
+              <div className="fixed inset-0 bg-gray-200/40 backdrop-blur-[2px] flex items-center justify-center z-50">
+                <div className="bg-white rounded-xl shadow-2xl p-6 relative max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
                   <h2 className="text-xl font-bold mb-4">Edit Product</h2>
                   <form onSubmit={handleEditProduct}>
                     <div className="space-y-4">
@@ -2512,8 +2921,8 @@ export default function AdminPage() {
 
             {/* Delete Product Confirmation Modal */}
             {showDeleteProductModal && selectedProduct && (
-              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+              <div className="fixed inset-0 bg-gray-200/40 backdrop-blur-[2px] flex items-center justify-center z-50">
+                <div className="bg-white rounded-xl shadow-2xl p-6 relative max-w-md w-full mx-4">
                   <h2 className="text-xl font-bold mb-4">Confirm Deactivation</h2>
                   <p className="text-gray-600 mb-6">
                     Are you sure you want to deactivate "{selectedProduct.name}"? This action can be reversed later.
@@ -2541,8 +2950,8 @@ export default function AdminPage() {
 
             {/* Hard Delete Product Confirmation Modal */}
             {showHardDeleteProductModal && selectedProduct && (
-              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+              <div className="fixed inset-0 bg-gray-200/40 backdrop-blur-sm flex items-center justify-center z-50">
+                <div className="bg-white rounded-xl shadow-2xl p-6 relative max-w-md w-full mx-4">
                   <h2 className="text-xl font-bold mb-4 text-red-600">⚠️ Permanent Delete</h2>
                   <p className="text-gray-600 mb-6">
                     Are you sure you want to <strong>permanently delete</strong> "{selectedProduct.name}"? 
@@ -2570,8 +2979,12 @@ export default function AdminPage() {
             )}
           </>
         )}
+        {/* Coupons Tab */}
+        {activeTab === "coupons" && (
+          <CouponsPanel token={getAuthToken()} />
+        )}
+
       </div>
     </div>
   );
 }
-
