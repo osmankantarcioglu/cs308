@@ -20,6 +20,11 @@ function CouponsPanel({ token }) {
   const [coupons, setCoupons] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // Filters (match Products tab layout)
+  const [couponSearchTerm, setCouponSearchTerm] = useState("");
+  const [couponStatusFilter, setCouponStatusFilter] = useState("");
+
+  // Modal
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
 
@@ -150,76 +155,154 @@ function CouponsPanel({ token }) {
     }
   };
 
+  const filteredCoupons = useMemo(() => {
+    const q = couponSearchTerm.trim().toLowerCase();
+    return (coupons || []).filter((c) => {
+      const expired = c.expires_at && new Date(c.expires_at) < new Date();
+      const statusOk =
+        couponStatusFilter === ""
+          ? true
+          : couponStatusFilter === "active"
+          ? !expired && !!c.is_active
+          : couponStatusFilter === "inactive"
+          ? !expired && !c.is_active
+          : couponStatusFilter === "expired"
+          ? !!expired
+          : true;
+
+      const searchOk = !q ? true : String(c.code || "").toLowerCase().includes(q);
+      return statusOk && searchOk;
+    });
+  }, [coupons, couponSearchTerm, couponStatusFilter]);
+
   if (loading) {
     return <div className="bg-white rounded-lg shadow p-6">Loading coupons...</div>;
   }
 
   return (
     <>
-      <div className="bg-white rounded-lg shadow p-6 mb-6 flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-gray-900">Coupons</h2>
-          <p className="text-sm text-gray-600">Create and manage coupon codes for customers.</p>
+      {/* Filters (same layout as Products tab) */}
+      <div className="bg-white rounded-lg shadow p-6 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
+            <input
+              type="text"
+              placeholder="Search by coupon code..."
+              value={couponSearchTerm}
+              onChange={(e) => setCouponSearchTerm(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+            <select
+              value={couponStatusFilter}
+              onChange={(e) => setCouponStatusFilter(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">All Status</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+              <option value="expired">Expired</option>
+            </select>
+          </div>
+
+          <div className="flex items-end">
+            <button
+              onClick={openCreate}
+              className="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
+            >
+              Add New Coupon
+            </button>
+          </div>
         </div>
-        <button
-          onClick={openCreate}
-          className="px-5 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700"
-        >
-          Add New Coupon
-        </button>
       </div>
 
+      {/* Coupons Table (same styling as Products tab) */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="min-w-full">
-            <thead className="bg-gray-50 border-b">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase">Code</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase">Discount</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase">Min Subtotal</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase">Expires</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase">Actions</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Code
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Discount
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Min Subtotal
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Expires
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Status
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Actions
+                </th>
               </tr>
             </thead>
 
-            <tbody className="divide-y">
-              {coupons.map((c) => {
+            <tbody className="bg-white divide-y divide-gray-200">
+              {filteredCoupons.map((c) => {
                 const expired = c.expires_at && new Date(c.expires_at) < new Date();
                 const statusText = expired ? "Expired" : c.is_active ? "Active" : "Inactive";
-                const statusClass =
-                  expired
-                    ? "bg-gray-100 text-gray-700"
-                    : c.is_active
-                    ? "bg-green-100 text-green-800"
-                    : "bg-gray-100 text-gray-700";
+
+                const statusClass = expired
+                  ? "bg-gray-100 text-gray-800"
+                  : c.is_active
+                  ? "bg-green-100 text-green-800"
+                  : "bg-red-100 text-red-800";
 
                 return (
                   <tr key={c._id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 font-semibold text-gray-900">{c.code}</td>
-                    <td className="px-6 py-4 text-gray-700">{c.discount_rate}%</td>
-                    <td className="px-6 py-4 text-gray-700">${Number(c.min_subtotal || 0).toFixed(2)}</td>
-                    <td className="px-6 py-4 text-gray-700">
-                      {c.expires_at ? String(c.expires_at).slice(0, 10) : "-"}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-gray-900">{c.code}</div>
                     </td>
-                    <td className="px-6 py-4">
-                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${statusClass}`}>
+
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">{Number(c.discount_rate || 0)}%</div>
+                    </td>
+
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">
+                        ${Number(c.min_subtotal || 0).toFixed(2)}
+                      </div>
+                    </td>
+
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-500">
+                        {c.expires_at ? String(c.expires_at).slice(0, 10) : "-"}
+                      </div>
+                    </td>
+
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusClass}`}>
                         {statusText}
                       </span>
                     </td>
-                    <td className="px-6 py-4 space-x-3">
-                      <button onClick={() => openEdit(c)} className="text-blue-600 hover:text-blue-800 font-medium">
+
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                      <button onClick={() => openEdit(c)} className="text-blue-600 hover:text-blue-900">
                         Edit
                       </button>
-                      <button
-                        onClick={() => toggleActive(c)}
-                        className="text-orange-600 hover:text-orange-800 font-medium"
-                      >
-                        {c.is_active ? "Deactivate" : "Activate"}
-                      </button>
+
+                      {!expired && (
+                        <button
+                          onClick={() => toggleActive(c)}
+                          className={c.is_active ? "text-red-600 hover:text-red-900" : "text-green-600 hover:text-green-900"}
+                        >
+                          {c.is_active ? "Deactivate" : "Activate"}
+                        </button>
+                      )}
+
                       <button
                         onClick={() => removeCoupon(c._id)}
-                        className="text-red-600 hover:text-red-800 font-medium"
+                        className="text-red-800 hover:text-red-900 font-bold"
                       >
                         Delete
                       </button>
@@ -228,10 +311,10 @@ function CouponsPanel({ token }) {
                 );
               })}
 
-              {coupons.length === 0 && (
+              {filteredCoupons.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-6 py-10 text-center text-gray-500">
-                    No coupons yet.
+                    No coupons found.
                   </td>
                 </tr>
               )}
@@ -240,79 +323,86 @@ function CouponsPanel({ token }) {
         </div>
       </div>
 
+      {/* Modal (keep simple, align to existing modal style) */}
       {open && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="w-full max-w-lg bg-white rounded-2xl shadow-xl overflow-hidden">
-            <div className="px-6 py-4 border-b flex items-center justify-between">
-              <div className="font-bold text-gray-900">{editing ? "Edit Coupon" : "Add Coupon"}</div>
-              <button onClick={() => setOpen(false)} className="text-gray-500 hover:text-gray-800">
-                ✕
-              </button>
-            </div>
+        <div className="fixed inset-0 bg-gray-200/40 backdrop-blur-[2px] flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-2xl p-6 relative max-w-lg w-full mx-4">
+            <h2 className="text-xl font-bold mb-4">{editing ? "Edit Coupon" : "Add Coupon"}</h2>
 
-            <div className="p-6 space-y-4">
+            <div className="space-y-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Code</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Code</label>
                 <input
                   value={form.code}
                   onChange={(e) => setForm((s) => ({ ...s, code: e.target.value }))}
-                  className="w-full px-3 py-2 border rounded-lg"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
                   placeholder="WELCOME10"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Discount %</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Discount %</label>
                   <input
                     type="number"
                     min={1}
                     max={90}
                     value={form.discount_rate}
                     onChange={(e) => setForm((s) => ({ ...s, discount_rate: e.target.value }))}
-                    className="w-full px-3 py-2 border rounded-lg"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Min Subtotal ($)</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Min Subtotal ($)</label>
                   <input
                     type="number"
                     min={0}
                     value={form.min_subtotal}
                     onChange={(e) => setForm((s) => ({ ...s, min_subtotal: e.target.value }))}
-                    className="w-full px-3 py-2 border rounded-lg"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 items-center">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Expires At</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Expires At</label>
                   <input
                     type="date"
                     value={form.expires_at}
                     onChange={(e) => setForm((s) => ({ ...s, expires_at: e.target.value }))}
-                    className="w-full px-3 py-2 border rounded-lg"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
                   />
                 </div>
 
-                <label className="flex items-center gap-2 mt-7 text-sm font-semibold text-gray-700">
+                <div className="flex items-center mt-6 md:mt-0">
                   <input
                     type="checkbox"
                     checked={form.is_active}
                     onChange={(e) => setForm((s) => ({ ...s, is_active: e.target.checked }))}
-                    className="h-4 w-4"
+                    className="mr-2"
                   />
-                  Active
-                </label>
+                  <label className="text-sm font-medium text-gray-700">Active</label>
+                </div>
               </div>
             </div>
 
-            <div className="px-6 py-4 border-t flex justify-end gap-2">
-              <button onClick={() => setOpen(false)} className="px-4 py-2 rounded-lg border">
+            <div className="mt-6 flex justify-end space-x-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  setEditing(null);
+                }}
+                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+              >
                 Cancel
               </button>
-              <button onClick={save} className="px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold">
+              <button
+                type="button"
+                onClick={save}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              >
                 Save
               </button>
             </div>
@@ -322,7 +412,6 @@ function CouponsPanel({ token }) {
     </>
   );
 }
-
 
 export default function AdminPage() {
   const navigate = useNavigate();
@@ -1484,8 +1573,8 @@ export default function AdminPage() {
 
         {/* Add User Modal */}
         {showAddModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
+          <div className="fixed inset-0 bg-gray-200/40 backdrop-blur-[2px] flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl shadow-2xl p-6 relative max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
               <h2 className="text-xl font-bold mb-4">Add New User</h2>
               <form onSubmit={handleAddUser}>
                 <div className="space-y-4">
@@ -1634,8 +1723,8 @@ export default function AdminPage() {
 
         {/* Edit User Modal */}
         {showEditModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
+          <div className="fixed inset-0 bg-gray-200/40 backdrop-blur-[2px] flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl shadow-2xl p-6 relative max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
               <h2 className="text-xl font-bold mb-4">Edit User</h2>
               <form onSubmit={handleEditUser}>
                 <div className="space-y-4">
@@ -1784,8 +1873,8 @@ export default function AdminPage() {
 
         {/* Delete Confirmation Modal */}
         {showDeleteModal && selectedUser && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+          <div className="fixed inset-0 bg-gray-200/40 backdrop-blur-[2px] flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl shadow-2xl p-6 relative max-w-md w-full mx-4">
               <h2 className="text-xl font-bold mb-4">Confirm Deactivation</h2>
               <p className="text-gray-600 mb-6">
                 Are you sure you want to deactivate {selectedUser.first_name}{" "}
@@ -1815,8 +1904,8 @@ export default function AdminPage() {
 
         {/* Hard Delete User Confirmation Modal */}
         {showHardDeleteUserModal && selectedUser && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+          <div className="fixed inset-0 bg-gray-200/40 backdrop-blur-[2px] flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl shadow-2xl p-6 relative max-w-md w-full mx-4">
               <h2 className="text-xl font-bold mb-4 text-red-600">⚠️ Permanent Delete</h2>
               <p className="text-gray-600 mb-6">
                 Are you sure you want to <strong>permanently delete</strong> {selectedUser.first_name}{" "}
@@ -2032,8 +2121,8 @@ export default function AdminPage() {
 
             {/* Add Category Modal */}
             {showAddCategoryModal && (
-              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
+              <div className="fixed inset-0 bg-gray-200/40 backdrop-blur-[2px] flex items-center justify-center z-50">
+                <div className="bg-white rounded-xl shadow-2xl p-6 relative max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
                   <h2 className="text-xl font-bold mb-4">Add New Category</h2>
                   <form onSubmit={handleAddCategory}>
                     <div className="space-y-4">
@@ -2122,8 +2211,8 @@ export default function AdminPage() {
 
             {/* Edit Category Modal */}
             {showEditCategoryModal && (
-              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
+              <div className="fixed inset-0 bg-gray-200/40 backdrop-blur-[2px] flex items-center justify-center z-50">
+                <div className="bg-white rounded-xl shadow-2xl p-6 relative max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
                   <h2 className="text-xl font-bold mb-4">Edit Category</h2>
                   <form onSubmit={handleEditCategory}>
                     <div className="space-y-4">
@@ -2213,8 +2302,8 @@ export default function AdminPage() {
 
             {/* Delete Category Confirmation Modal */}
             {showDeleteCategoryModal && selectedCategory && (
-              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+              <div className="fixed inset-0 bg-gray-200/40 backdrop-blur-[2px] flex items-center justify-center z-50">
+                <div className="bg-white rounded-xl shadow-2xl p-6 relative max-w-md w-full mx-4">
                   <h2 className="text-xl font-bold mb-4">Confirm Deactivation</h2>
                   <p className="text-gray-600 mb-6">
                     Are you sure you want to deactivate "{selectedCategory.name}"? This action can
@@ -2243,8 +2332,8 @@ export default function AdminPage() {
 
             {/* Hard Delete Category Confirmation Modal */}
             {showHardDeleteCategoryModal && selectedCategory && (
-              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+              <div className="fixed inset-0 bg-gray-200/40 backdrop-blur-[2px] flex items-center justify-center z-50">
+                <div className="bg-white rounded-xl shadow-2xl p-6 relative max-w-md w-full mx-4">
                   <h2 className="text-xl font-bold mb-4 text-red-600">⚠️ Permanent Delete</h2>
                   <p className="text-gray-600 mb-6">
                     Are you sure you want to <strong>permanently delete</strong> "{selectedCategory.name}"? 
@@ -2488,8 +2577,8 @@ export default function AdminPage() {
 
             {/* Add Product Modal */}
             {showAddProductModal && (
-              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
+              <div className="fixed inset-0 bg-gray-200/40 backdrop-blur-[2px] flex items-center justify-center z-50">
+                <div className="bg-white rounded-xl shadow-2xl p-6 relative max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
                   <h2 className="text-xl font-bold mb-4">Add New Product</h2>
                   <form onSubmit={handleAddProduct}>
                     <div className="space-y-4">
@@ -2633,8 +2722,8 @@ export default function AdminPage() {
 
             {/* Edit Product Modal */}
             {showEditProductModal && (
-              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
+              <div className="fixed inset-0 bg-gray-200/40 backdrop-blur-[2px] flex items-center justify-center z-50">
+                <div className="bg-white rounded-xl shadow-2xl p-6 relative max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
                   <h2 className="text-xl font-bold mb-4">Edit Product</h2>
                   <form onSubmit={handleEditProduct}>
                     <div className="space-y-4">
@@ -2832,8 +2921,8 @@ export default function AdminPage() {
 
             {/* Delete Product Confirmation Modal */}
             {showDeleteProductModal && selectedProduct && (
-              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+              <div className="fixed inset-0 bg-gray-200/40 backdrop-blur-[2px] flex items-center justify-center z-50">
+                <div className="bg-white rounded-xl shadow-2xl p-6 relative max-w-md w-full mx-4">
                   <h2 className="text-xl font-bold mb-4">Confirm Deactivation</h2>
                   <p className="text-gray-600 mb-6">
                     Are you sure you want to deactivate "{selectedProduct.name}"? This action can be reversed later.
@@ -2861,8 +2950,8 @@ export default function AdminPage() {
 
             {/* Hard Delete Product Confirmation Modal */}
             {showHardDeleteProductModal && selectedProduct && (
-              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+              <div className="fixed inset-0 bg-gray-200/40 backdrop-blur-sm flex items-center justify-center z-50">
+                <div className="bg-white rounded-xl shadow-2xl p-6 relative max-w-md w-full mx-4">
                   <h2 className="text-xl font-bold mb-4 text-red-600">⚠️ Permanent Delete</h2>
                   <p className="text-gray-600 mb-6">
                     Are you sure you want to <strong>permanently delete</strong> "{selectedProduct.name}"? 
@@ -2899,4 +2988,3 @@ export default function AdminPage() {
     </div>
   );
 }
-
