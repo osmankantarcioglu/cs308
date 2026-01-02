@@ -7,7 +7,7 @@ const API_BASE_URL = "http://localhost:3000/orders";
 
 export default function CheckoutPage() {
   const navigate = useNavigate();
-  const { cartItems, cartTotal } = useCart();
+  const { cartItems, cartTotal, appliedCoupon } = useCart(); // Ensure cartItems is destructured here
   const { isAuthenticated, user, token } = useAuth();
   
   const [deliveryAddress, setDeliveryAddress] = useState(user?.home_address || "");
@@ -21,18 +21,38 @@ export default function CheckoutPage() {
       return;
     }
     
+    // Check if cart is empty
     if (!cartItems || cartItems.length === 0) {
-      alert('Your cart is empty');
-      navigate('/basket');
-      return;
+      // Allow a small delay or check if data is still loading if needed, 
+      // but strictly redirecting here is fine for now.
+      // alert('Your cart is empty'); 
+      // navigate('/basket');
     }
   }, [isAuthenticated, cartItems, navigate]);
 
-  // Calculate totals
+  // --- COUPON LOGIC START ---
+  const storedCouponRaw = localStorage.getItem("appliedCoupon"); 
+  const storedCoupon = storedCouponRaw ? JSON.parse(storedCouponRaw) : null;
+
+  const coupon = appliedCoupon || storedCoupon; 
   const subtotal = parseFloat(cartTotal) || 0;
-  const shipping = subtotal >= 100 ? 0 : 15; // Free shipping over $100
-  const tax = (subtotal + shipping) * 0.08; // 8% tax on subtotal + shipping
-  const total = subtotal + shipping + tax;
+
+  const discountRate = coupon?.discount_rate ? Number(coupon.discount_rate) : 0;
+  const minSubtotal = coupon?.min_subtotal ? Number(coupon.min_subtotal) : 0;
+
+  const isCouponEligible =
+    coupon?.code &&
+    discountRate > 0 &&
+    (coupon.is_active === undefined || coupon.is_active === true) &&
+    subtotal >= minSubtotal;
+
+  const discountAmount = isCouponEligible ? (subtotal * discountRate) / 100 : 0;
+  const discountedSubtotal = Math.max(0, subtotal - discountAmount);
+
+  const shipping = discountedSubtotal >= 100 ? 0 : 15; 
+  const tax = (discountedSubtotal + shipping) * 0.08; 
+  const total = discountedSubtotal + shipping + tax;
+  // --- COUPON LOGIC END ---
 
   const handleCheckout = async (e) => {
     e.preventDefault();
@@ -53,7 +73,9 @@ export default function CheckoutPage() {
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          delivery_address: deliveryAddress
+          items: cartItems, 
+          delivery_address: deliveryAddress,
+          coupon_code: coupon?.code || "" 
         }),
       });
       
@@ -65,7 +87,6 @@ export default function CheckoutPage() {
       const data = await response.json();
       
       if (data.success && data.data.url) {
-        // Redirect to Stripe checkout
         window.location.href = data.data.url;
       } else {
         throw new Error('Invalid response from server');
@@ -145,15 +166,27 @@ export default function CheckoutPage() {
                 <span>Subtotal</span>
                 <span className="font-semibold">${subtotal.toFixed(2)}</span>
               </div>
+              {/* Coupon */}
+              {discountAmount > 0 && coupon?.code && (
+                <div className="flex justify-between text-gray-600">
+                  <span className="flex items-center gap-2">
+                    Coupon
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-semibold">
+                      {coupon.code}
+                    </span>
+                  </span>
+                  <span className="font-semibold text-green-700">-${discountAmount.toFixed(2)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-gray-600">
                 <span>Shipping</span>
                 <span className={`font-semibold ${shipping === 0 ? 'text-green-600' : 'text-gray-900'}`}>
                   {shipping === 0 ? 'FREE' : `$${shipping.toFixed(2)}`}
                 </span>
               </div>
-              {subtotal < 100 && shipping > 0 && (
+              {discountedSubtotal < 100 && shipping > 0 && (
                 <div className="text-xs text-blue-600 bg-blue-50 px-3 py-2 rounded">
-                  💡 Add ${(100 - subtotal).toFixed(2)} more for FREE shipping!
+                  💡 Add ${(100 - discountedSubtotal).toFixed(2)} more for FREE shipping!
                 </div>
               )}
               <div className="flex justify-between text-gray-600">

@@ -20,6 +20,8 @@ var reviewsRouter = require('./routes/reviews');
 var chatsRouter = require('./routes/chats');
 var discountsRouter = require('./routes/discounts');
 var salesRouter = require('./routes/sales');
+var couponsRouter = require("./routes/coupons");
+
 
 var app = express();
 
@@ -55,6 +57,8 @@ app.use('/reviews', reviewsRouter); // http://localhost:3000/reviews
 app.use('/chats', chatsRouter); // http://localhost:3000/chats
 app.use('/discounts', discountsRouter); // http://localhost:3000/discounts
 app.use('/sales', salesRouter); // http://localhost:3000/sales
+app.use("/coupons", couponsRouter); // http://localhost:3000/coupons
+
 
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {
