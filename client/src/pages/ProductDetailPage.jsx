@@ -26,6 +26,9 @@ export default function ProductDetailPage() {
   const [reviewsLoading, setReviewsLoading] = useState(true);
   const [reviewError, setReviewError] = useState(null);
   const [reviewStats, setReviewStats] = useState({ averageRating: 0, reviewCount: 0 });
+  const [relatedProducts, setRelatedProducts] = useState([]);
+  const [relatedLoading, setRelatedLoading] = useState(true);
+  const [relatedError, setRelatedError] = useState(null);
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [reviewRating, setReviewRating] = useState(0);
   const [submittingReview, setSubmittingReview] = useState(false);
@@ -100,6 +103,33 @@ export default function ProductDetailPage() {
     }
   }, [id]);
 
+  const fetchRelatedProducts = useCallback(async () => {
+    if (!id) return;
+
+    try {
+      setRelatedLoading(true);
+      setRelatedError(null);
+
+      const response = await fetch(`${API_BASE_URL}/${id}/related?limit=4`);
+
+      if (!response.ok) {
+        throw new Error(`Unable to load related products (status ${response.status})`);
+      }
+
+      const data = await response.json();
+      if (data.success) {
+        setRelatedProducts(data.data.products || []);
+      } else {
+        throw new Error(data.error || "Unable to load related products");
+      }
+    } catch (error) {
+      console.error("Error fetching related products:", error);
+      setRelatedError(error.message);
+    } finally {
+      setRelatedLoading(false);
+    }
+  }, [id]);
+
   // Fetch product details
   useEffect(() => {
     const fetchProduct = async () => {
@@ -143,6 +173,10 @@ export default function ProductDetailPage() {
   useEffect(() => {
     fetchReviews();
   }, [fetchReviews]);
+
+  useEffect(() => {
+    fetchRelatedProducts();
+  }, [fetchRelatedProducts]);
 
   // Check if user has purchased and delivered this product
   useEffect(() => {
@@ -702,6 +736,103 @@ export default function ProductDetailPage() {
                   </div>
                   <p className="text-gray-700 whitespace-pre-line">{review.comment}</p>
                 </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Related Products Section */}
+        <div className="mt-8 bg-white rounded-xl shadow-lg p-4 sm:p-6">
+          <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between mb-4">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">Related Products</h2>
+              <p className="text-gray-600 mt-0.5">You might also like these items.</p>
+            </div>
+            <Link
+              to="/products"
+              className="text-primary font-semibold hover:text-primary-dark transition-colors"
+            >
+              Browse all products →
+            </Link>
+          </div>
+
+          {relatedError && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg mb-4 text-red-700">
+              {relatedError}
+            </div>
+          )}
+
+          {relatedLoading ? (
+            <div className="text-center py-6">
+              <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-primary mx-auto"></div>
+            </div>
+          ) : relatedProducts.length === 0 ? (
+            <p className="text-gray-500 text-center py-6 text-sm">
+              No related products found right now.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {relatedProducts.map((item) => (
+                <Link
+                  key={item._id}
+                  to={`/products/${item._id}`}
+                  className="group bg-white rounded-xl shadow-sm hover:shadow-xl transition-all overflow-hidden focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  <div className="relative h-36 sm:h-56 bg-gray-100 overflow-hidden">
+                    {item.images && item.images.length > 0 ? (
+                      <img
+                        src={item.images[0]}
+                        alt={item.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-gray-200">
+                        <svg
+                          className="w-10 h-10 text-gray-400"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                          />
+                        </svg>
+                      </div>
+                    )}
+
+                    {item.active_discount && item.active_discount.discount_rate > 0 && (
+                      <div className="absolute top-2 left-2 bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full z-20 shadow-md">
+                        {Math.round(item.active_discount.discount_rate)}% OFF
+                      </div>
+                    )}
+
+                    {item.quantity === 0 && (
+                      <div className="absolute top-2 right-2 bg-gray-900 text-white text-xs font-bold px-2 py-0.5 rounded-full z-20 shadow-md">
+                        Out of Stock
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="p-3">
+                    <div className="text-xs text-gray-500 mb-1">
+                      {item.category?.name || "Uncategorized"}
+                    </div>
+                    <h3 className="text-sm font-semibold text-gray-900 mb-1 line-clamp-2">
+                      {item.name}
+                    </h3>
+                    <div className="mb-2">
+                      <span className="text-lg font-bold text-gray-900">
+                        ${item.price ? item.price.toFixed(2) : "0.00"}
+                      </span>
+                    </div>
+                    <div className="w-full py-1.5 bg-gray-900 text-white font-semibold rounded-lg text-center group-hover:bg-primary transition-colors">
+                      View Details
+                    </div>
+                  </div>
+                </Link>
               ))}
             </div>
           )}
