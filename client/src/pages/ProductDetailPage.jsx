@@ -178,6 +178,27 @@ export default function ProductDetailPage() {
     fetchRelatedProducts();
   }, [fetchRelatedProducts]);
 
+  useEffect(() => {
+    if (!product?._id) return;
+
+    const key = "recently_viewed";
+    const item = {
+      _id: product._id,
+      name: product.name,
+      price: product.price,
+      images: product.images || [],
+      category: product.category || null,
+      quantity: product.quantity,
+    };
+
+    try {
+      const current = JSON.parse(localStorage.getItem(key) || "[]");
+      const next = [item, ...current.filter((p) => p?._id !== item._id)].slice(0, 8);
+      localStorage.setItem(key, JSON.stringify(next));
+    } catch (e) {
+    }
+  }, [product?._id]);
+
   // Check if user has purchased and delivered this product
   useEffect(() => {
     const checkPurchaseStatus = async () => {
@@ -828,7 +849,7 @@ export default function ProductDetailPage() {
                         ${item.price ? item.price.toFixed(2) : "0.00"}
                       </span>
                     </div>
-                    <div className="w-full py-1.5 bg-gray-900 text-white font-semibold rounded-lg text-center group-hover:bg-primary transition-colors">
+                    <div className="w-full py-1.5 text-sm font-semibold rounded-lg text-center transition-colors bg-primary text-white hover:bg-primary-dark"> 
                       View Details
                     </div>
                   </div>
