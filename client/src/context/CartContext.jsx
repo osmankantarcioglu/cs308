@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react';
+import { useAuth } from './AuthContext';
 
 const CartContext = createContext();
 
@@ -9,11 +10,22 @@ export function CartProvider({ children }) {
   const [cartTotal, setCartTotal] = useState(0);
   const [itemCount, setItemCount] = useState(0);
   const [loading, setLoading] = useState(false);
+  
+  const { token } = useAuth();
 
   // Fetch cart from API
   const fetchCart = async () => {
     try {
+      const headers = {
+        'Content-Type': 'application/json'
+      };
+      
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const response = await fetch(`${API_BASE_URL}`, {
+        headers,
         credentials: 'include'
       });
       
@@ -34,11 +46,18 @@ export function CartProvider({ children }) {
   const addToCart = async (productId, quantity = 1) => {
     try {
       setLoading(true);
+      
+      const headers = {
+        'Content-Type': 'application/json',
+      };
+      
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
       const response = await fetch(`${API_BASE_URL}/add`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         credentials: 'include',
         body: JSON.stringify({ productId, quantity }),
       });
@@ -67,11 +86,18 @@ export function CartProvider({ children }) {
   const updateQuantity = async (productId, quantity) => {
     try {
       setLoading(true);
+      
+      const headers = {
+        'Content-Type': 'application/json',
+      };
+      
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const response = await fetch(`${API_BASE_URL}/update/${productId}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         credentials: 'include',
         body: JSON.stringify({ quantity }),
       });
@@ -99,8 +125,16 @@ export function CartProvider({ children }) {
   const removeFromCart = async (productId) => {
     try {
       setLoading(true);
+      
+      const headers = {};
+      
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const response = await fetch(`${API_BASE_URL}/remove/${productId}`, {
         method: 'DELETE',
+        headers,
         credentials: 'include',
       });
 
@@ -126,8 +160,16 @@ export function CartProvider({ children }) {
   const clearCart = async () => {
     try {
       setLoading(true);
+      
+      const headers = {};
+      
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const response = await fetch(`${API_BASE_URL}/clear`, {
         method: 'DELETE',
+        headers,
         credentials: 'include',
       });
 
@@ -151,10 +193,10 @@ export function CartProvider({ children }) {
     }
   };
 
-  // Initial fetch on mount
+  // Initial fetch on mount or when token changes
   useEffect(() => {
     fetchCart();
-  }, []);
+  }, [token]);
 
   const value = {
     cartItems,

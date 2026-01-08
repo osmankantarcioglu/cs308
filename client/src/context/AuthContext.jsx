@@ -55,6 +55,7 @@ export function AuthProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({ email, password }),
       });
 
@@ -71,11 +72,11 @@ export function AuthProvider({ children }) {
         setToken(data.data.token);
         localStorage.setItem('token', data.data.token);
         localStorage.setItem('user', JSON.stringify(userData));
-        
+
         // Return user data including role for redirect logic
-        return { 
-          success: true, 
-          user: userData 
+        return {
+          success: true,
+          user: userData
         };
       }
     } catch (error) {
@@ -98,6 +99,7 @@ export function AuthProvider({ children }) {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify(userData),
       });
 
