@@ -3,6 +3,8 @@ import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
 import { useWishlist } from "../context/WishlistContext";
+import { useCompare } from "../context/CompareContext";
+
 
 const API_BASE_URL = "http://localhost:3000/products";
 const CATEGORIES_API_URL = "http://localhost:3000/categories";
@@ -20,7 +22,9 @@ export default function ProductsPage() {
   const [sortBy, setSortBy] = useState(""); // "price_asc", "price_desc", "popularity"
   const { isAuthenticated } = useAuth();
   const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
-  
+  const { toggle, isSelected, items, MAX_COMPARE } = useCompare();
+
+
   // Update search term and category when URL changes (from Navbar)
   useEffect(() => {
     const urlSearchTerm = searchParams.get("q") || "";
@@ -121,6 +125,11 @@ export default function ProductsPage() {
 
   const handleSelectProduct = (productId) => {
     navigate(`/products/${productId}`);
+  };
+
+  const handleCompareToggle = (e, product) => {
+    e.stopPropagation();
+    toggle(product);
   };
 
   const handleWishlistToggle = async (e, productId, productName) => {
@@ -407,6 +416,26 @@ export default function ProductsPage() {
                       ${product.price ? product.price.toFixed(2) : "0.00"}
                     </span>
                   </div>
+                  <div data-compare="true" className="flex items-center justify-between mb-2">
+                  <label
+                    className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-primary"
+                      checked={isSelected(product._id)}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => handleCompareToggle(e, product)}
+                      disabled={!isSelected(product._id) && items.length >= MAX_COMPARE}
+                    />
+                    Compare
+                  </label>
+
+                  {!isSelected(product._id) && items.length >= MAX_COMPARE && (
+                    <span className="text-xs text-gray-400">Max {MAX_COMPARE}</span>
+                  )}
+                  </div>
                   <div className="mt-4">
                     <span className="inline-flex items-center px-3 py-1 text-sm font-medium text-primary bg-primary/10 rounded-full">
                       Click to view details
@@ -417,6 +446,9 @@ export default function ProductsPage() {
             ))}
           </div>
         )}
+
+        {/* Recently Viewed */}
+        <RecentlyViewedSection />
 
         {/* Back to Home */}
         <div className="mt-12 text-center">
@@ -435,3 +467,78 @@ export default function ProductsPage() {
   );
 }
 
+/**
+ * Recently viewed products section (
+ */
+function RecentlyViewedSection() {
+  const [items, setItems] = useState([]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("recently_viewed");
+      const data = raw ? JSON.parse(raw) : [];
+      setItems(Array.isArray(data) ? data.slice(0, 4) : []);
+    } catch (e) {
+      console.error("Failed to read recently_viewed:", e);
+      setItems([]);
+    }
+  }, []);
+
+  if (!items.length) return null;
+
+  return (
+    <div className="mt-10 bg-white rounded-xl shadow-lg p-4 sm:p-6">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="text-xl font-bold text-gray-900">Recently Viewed</h2>
+          <p className="text-sm text-gray-600 mt-0.5">Products you looked at recently.</p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            localStorage.removeItem("recently_viewed");
+            setItems([]);
+          }}
+          className="text-sm font-semibold text-gray-500 hover:text-gray-900"
+        >
+          Clear
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        {items.map((p) => (
+          <Link
+            key={p._id}
+            to={`/products/${p._id}`}
+            className="group bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-lg transition-all overflow-hidden focus:outline-none focus:ring-2 focus:ring-primary"
+          >
+            <div className="relative h-32 sm:h-36 bg-gray-100 overflow-hidden">
+              {p?.images?.[0] ? (
+                <img
+                  src={p.images[0]}
+                  alt={p.name}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">
+                  No image
+                </div>
+              )}
+            </div>
+
+            <div className="p-3">
+              <div className="text-[11px] text-gray-500 mb-1 line-clamp-1">
+                {typeof p.category === "string" ? p.category : (p.category?.name || "Uncategorized")}
+              </div>
+              <h3 className="text-sm font-semibold text-gray-900 mb-1 line-clamp-2">{p.name}</h3>
+              <div className="text-sm font-bold text-gray-900">
+                ${p?.price != null ? Number(p.price).toFixed(2) : "0.00"}
+              </div>
+            </div>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}

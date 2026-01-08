@@ -1,4 +1,4 @@
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, useLocation} from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import { CartProvider } from "./context/CartContext";
 import { WishlistProvider } from "./context/WishlistContext";
@@ -37,8 +37,12 @@ import TermsOfServicePage from "./pages/TermsOfServicePage";
 import CookiePolicyPage from "./pages/CookiePolicyPage";
 import CustomerChatWidget from "./components/CustomerChatWidget";
 import CategoriesPage from "./pages/CategoriesPage";
+import CompareBar from "./components/CompareBar";
+import ComparePage from "./pages/ComparePage";
 
 export default function App() {
+  const location = useLocation();
+  const isComparePage = location.pathname === "/compare";
   return (
     <AuthProvider>
       <CartProvider>
@@ -81,9 +85,12 @@ export default function App() {
           <Route path="/sales-manager/dashboard" element={<SalesManagerRoute><SalesManagerDashboard /></SalesManagerRoute>} />
           <Route path="/support" element={<SupportAgentLoginPage />} />
           <Route path="/support/dashboard" element={<SupportAgentRoute><SupportAgentDashboard /></SupportAgentRoute>} />
+          <Route path="/compare" element={<ComparePage />} />
             </Routes>
-            <CustomerChatWidget />
-            <Footer />
+            {!isComparePage && <CompareBar />}
+            {!isComparePage && <CustomerChatWidget />}
+            {!isComparePage && <Footer />}
+            
           </div>
         </WishlistProvider>
       </CartProvider>

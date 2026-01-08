@@ -835,6 +835,90 @@ router.get('/:id/purchased', optionalAuthenticate, async function(req, res, next
 });
 
 /**
+ * @route   GET /products/:id/related
+ * @desc    Get related products for a given product (same category, excludes current product)
+ * @query   limit (optional, default 4)
+ */
+router.get('/:id/related', async function(req, res, next) {
+    try {
+        const limit = Math.min(12, Math.max(1, parseInt(req.query.limit, 10) || 4));
+
+        const baseProduct = await Product.findById(req.params.id)
+            .select('_id category is_active')
+            .lean();
+
+        if (!baseProduct || !baseProduct.is_active) {
+            throw new NotFoundError('Product not found');
+        }
+
+        // If product has no category, fall back to popular products.
+        const query = {
+            is_active: true,
+            _id: { $ne: baseProduct._id }
+        };
+
+        if (baseProduct.category) {
+            query.category = baseProduct.category;
+        }
+
+        const relatedProducts = await Product.find(query)
+            .populate('category', 'name')
+            .sort({ popularity_score: -1, view_count: -1, createdAt: -1 })
+            .limit(limit)
+            .lean();
+
+        // Attach active discount information (same logic as product listing)
+        const productIds = relatedProducts.map((p) => p._id);
+        const now = new Date();
+        const activeDiscounts = await Discount.find({
+            'products.product_id': { $in: productIds },
+            is_active: true,
+            start_date: { $lte: now },
+            end_date: { $gte: now }
+        }).lean();
+
+        const discountMap = new Map();
+        activeDiscounts.forEach((discount) => {
+            discount.products.forEach((product) => {
+                if (!product.product_id) return;
+                const productId = product.product_id.toString();
+                const existing = discountMap.get(productId);
+                if (!existing || discount.discount_rate > existing.discount_rate) {
+                    discountMap.set(productId, {
+                        discount_rate: discount.discount_rate,
+                        original_price: product.original_price
+                    });
+                }
+            });
+        });
+
+        const relatedWithDiscounts = relatedProducts.map((product) => {
+            const discountInfo = discountMap.get(product._id.toString());
+            if (discountInfo) {
+                product.active_discount = {
+                    discount_rate: discountInfo.discount_rate,
+                    original_price: discountInfo.original_price
+                };
+            }
+            return product;
+        });
+
+        res.json({
+            success: true,
+            data: {
+                products: relatedWithDiscounts
+            }
+        });
+    } catch (error) {
+        if (error.name === 'CastError') {
+            next(new NotFoundError('Invalid product ID'));
+        } else {
+            next(error);
+        }
+    }
+});
+
+/**
  * @route   GET /products/:id
  * @desc    Get single product by ID
  * @query   incrementView=true to increment view count (optional)

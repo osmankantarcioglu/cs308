@@ -13,6 +13,7 @@ const Enum = require('../config/Enum');
 const { requireAdminOrProductManager } = require('../lib/middleware');
 const { generateInvoicePDF } = require('../services/invoiceService');
 const { sendInvoiceEmail } = require('../services/emailService');
+const Coupon = require("../db/models/Coupon"); 
 
 // Initialize Stripe only if API key is provided
 let stripe = null;
@@ -45,7 +46,7 @@ router.post('/create-checkout-session', authenticate, async function(req, res, n
         }
         
         const userId = req.user._id;
-        const { delivery_address } = req.body;
+        const { delivery_address, coupon_code } = req.body;
         
         if (!delivery_address) {
             return res.status(400).json({
@@ -96,16 +97,42 @@ router.post('/create-checkout-session', authenticate, async function(req, res, n
         
         // Calculate totals
         let subtotal = 0;
+        let couponDiscountRate = 0;
+        let couponDiscountAmount = 0;
+        let appliedCouponCode = null;
+
         cart.items.forEach(item => {
             subtotal += item.price_at_time * item.quantity;
         });
+
+        if (coupon_code) {
+            const code = String(coupon_code).trim();
+            const coupon = await Coupon.findOne({ 
+                code: { $regex: new RegExp("^" + code + "$", "i") }, 
+                is_active: true 
+            });
+            if (coupon) {
+              const now = new Date();
+              const expired = coupon.expires_at && new Date(coupon.expires_at) < now;
+          
+              if (!expired && subtotal >= (coupon.min_subtotal || 0)) {
+                couponDiscountRate = coupon.discount_rate;
+                appliedCouponCode = coupon.code;
+                couponDiscountAmount = (subtotal * couponDiscountRate) / 100;
+              }
+            }
+        }
+
+        const discountedSubtotal = Math.max(0, subtotal - couponDiscountAmount);
+        const effectiveSubtotal = appliedCouponCode ? discountedSubtotal : subtotal;
+
+        const shipping = effectiveSubtotal >= 100 ? 0 : 15;
+        const tax = (effectiveSubtotal + shipping) * 0.08;
+        const total = effectiveSubtotal + shipping + tax;
         
-        const shipping = subtotal >= 100 ? 0 : 15; // Free shipping over $100
-        const tax = (subtotal + shipping) * 0.08; // 8% tax on subtotal + shipping
-        const total = subtotal + shipping + tax;
-        
-        console.log('Subtotal:', subtotal, 'Shipping:', shipping, 'Tax:', tax, 'Total:', total);
-        
+        console.log('Subtotal:', effectiveSubtotal, 'Shipping:', shipping, 'Tax:', tax, 'Total:', total);
+        const rate = couponDiscountRate > 0 ? (1 - couponDiscountRate / 100) : 1;
+
         // Create Stripe line items
         const lineItems = cart.items.map(item => {
             const product = item.product_id;
@@ -117,7 +144,7 @@ router.post('/create-checkout-session', authenticate, async function(req, res, n
                         description: product.description || '',
                         images: product.images && product.images.length > 0 ? [product.images[0]] : [],
                     },
-                    unit_amount: Math.round(item.price_at_time * 100), // Convert to cents
+                    unit_amount: Math.round(item.price_at_time * rate * 100), // Convert to cents
                 },
                 quantity: item.quantity,
             };
@@ -150,7 +177,20 @@ router.post('/create-checkout-session', authenticate, async function(req, res, n
         });
         
         console.log('Creating Stripe session...');
-        
+        // ---- Stripe discount ----
+        let discounts = undefined;
+
+        if (appliedCouponCode && couponDiscountRate && Number(couponDiscountRate) > 0) {
+        // Create a one-time Stripe coupon dynamically
+        const stripeCoupon = await stripe.coupons.create({
+            percent_off: Number(couponDiscountRate),
+            duration: "once",
+            name: appliedCouponCode,
+        });
+
+        discounts = [{ coupon: stripeCoupon.id }];
+        }
+
         // Create Stripe checkout session
         const session = await stripe.checkout.sessions.create({
             payment_method_types: ['card'], // Only allow card payments
@@ -167,6 +207,10 @@ router.post('/create-checkout-session', authenticate, async function(req, res, n
                 tax: tax.toString(),
                 total: total.toString(),
                 cartId: cart._id.toString(),
+                coupon_code: appliedCouponCode || "",
+                coupon_discount_rate: couponDiscountRate.toString(),
+                coupon_discount_amount: couponDiscountAmount.toString(),
+                discounted_subtotal: discountedSubtotal.toString(),
             },
         });
         
