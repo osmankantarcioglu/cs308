@@ -4,12 +4,11 @@ import { useNavigate } from 'react-router-dom';
 
 const LuckWheelPage = () => {
     const [spinning, setSpinning] = useState(false);
-    const [segments, setSegments] = useState(['Loading...', 'Loading...', 'Loading...', 'Loading...', 'Loading...', 'Loading...', 'Loading...', 'Loading...']);
+    const [segments, setSegments] = useState([]); // Array of objects: { text, code, type, color }
     const [rotation, setRotation] = useState(0);
-    const [winningSegment, setWinningSegment] = useState(null);
+    const [winningResult, setWinningResult] = useState(null); // The result object after spin
     const navigate = useNavigate();
 
-    // Colors for the wheel segments (alternating or rainbow)
     const segmentColors = [
         '#FF6B6B', // Red
         '#4ECDC4', // Teal
@@ -21,41 +20,73 @@ const LuckWheelPage = () => {
         '#3498DB', // Dark Blue
     ];
 
+    // Shuffle function
+    const shuffleArray = (array) => {
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+        }
+        return array;
+    };
+
     useEffect(() => {
         const fetchCoupons = async () => {
             try {
                 const res = await fetch('http://localhost:3000/coupons');
                 const data = await res.json();
+                let initialSegments = [];
 
                 if (data.success && data.data) {
                     const availableCoupons = data.data;
-                    let newSegments = [];
 
                     if (availableCoupons.length > 6) {
                         // Take first 6 coupons
-                        const selectedCoupons = availableCoupons.slice(0, 6);
-                        newSegments = selectedCoupons.map(c => `${c.discount_rate}% OFF`);
+                        initialSegments = availableCoupons.slice(0, 6).map(c => ({
+                            text: `${c.discount_rate}% OFF`,
+                            code: c.code,
+                            type: 'win'
+                        }));
                         // Add 2 'Out of Luck'
-                        newSegments.push('Out of Luck');
-                        newSegments.push('Out of Luck');
+                        initialSegments.push({ text: 'Out of Luck', type: 'loss' });
+                        initialSegments.push({ text: 'Out of Luck', type: 'loss' });
                     } else {
                         // Take all coupons
-                        newSegments = availableCoupons.map(c => `${c.discount_rate}% OFF`);
+                        initialSegments = availableCoupons.map(c => ({
+                            text: `${c.discount_rate}% OFF`,
+                            code: c.code,
+                            type: 'win'
+                        }));
                         // Fill the rest with 'Out of Luck' until 8
-                        while (newSegments.length < 8) {
-                            newSegments.push('Out of Luck');
+                        while (initialSegments.length < 8) {
+                            initialSegments.push({ text: 'Out of Luck', type: 'loss' });
                         }
                     }
-                    setSegments(newSegments);
                 } else {
-                    // Fallback if no data
-                    setSegments(['Try Again', 'No Luck', 'Try Again', 'No Luck', 'Try Again', 'No Luck', 'Try Again', 'No Luck']);
+                    // Fallback
+                    initialSegments = Array(8).fill(null).map((_, i) =>
+                        i % 2 === 0 ? { text: 'Try Again', type: 'loss' } : { text: 'No Luck', type: 'loss' }
+                    );
                 }
+
+                // Shuffle the segments to separate coupons
+                initialSegments = shuffleArray(initialSegments);
+
+                // Assign colors sequentially after shuffle so the wheel looks nice
+                const finalSegments = initialSegments.map((seg, i) => ({
+                    ...seg,
+                    color: segmentColors[i % segmentColors.length]
+                }));
+
+                setSegments(finalSegments);
+
             } catch (err) {
                 console.error("Failed to fetch coupons", err);
-                setSegments(['Try Again', 'No Luck', 'Try Again', 'No Luck', 'Try Again', 'No Luck', 'Try Again', 'No Luck']);
-            } finally {
-                setLoading(false);
+                const fallback = Array(8).fill(null).map((_, i) => ({
+                    text: i % 2 === 0 ? 'Try Again' : 'No Luck',
+                    type: 'loss',
+                    color: segmentColors[i % segmentColors.length]
+                }));
+                setSegments(fallback);
             }
         };
 
@@ -63,13 +94,11 @@ const LuckWheelPage = () => {
     }, []);
 
     const spinWheel = () => {
-        if (spinning) return;
+        if (spinning || segments.length === 0) return;
         setSpinning(true);
-        setWinningSegment(null);
+        setWinningResult(null);
 
         // Calculate a new rotation
-        // Ensure at least 5 full spins (1800 degrees)
-        // Add random extra rotation (0-360)
         const minSpins = 5;
         const maxSpins = 10;
         const randomSpins = Math.floor(Math.random() * (maxSpins - minSpins + 1)) + minSpins;
@@ -80,24 +109,71 @@ const LuckWheelPage = () => {
 
         setRotation(newRotation);
 
-        // Calculate winner after spin animation finishes
         setTimeout(() => {
             setSpinning(false);
-            // Calculate which segment is at the top (pointer)
-            // The wheel rotates clockwise. The pointer is usually at 12 o'clock (270 degrees in CSS circle if 0 is right, but simpler is to check remainder)
-            // Let's assume 0 rotation = segment 0 starts at 0 degrees.
-            // 8 segments = 45 degrees each.
 
-            const actualRotation = newRotation % 360;
-            // You must adjust logic based on where the pointer is. 
-            // Assuming pointer is at top (270 deg or -90 deg relative to 3 o'clock default in standard math, but in CSS transform 0 is usually top or right depending on setup)
-            // Let's rely on visuals for now, precise math can be tuned.
+            // Calculate winner
+            // The pointer is at the TOP (0 degrees visual, or 270 in standard math context).
+            // Our CSS rotation rotates the wheel clockwise.
+            // If we rotate X degrees, the slice at the top is determined by:
+            // (360 - (X % 360)) % 360.
+            // Then divide by slice size.
+
+            const degreesRotated = newRotation % 360;
+            // Adjustment: standard CSS transform rotate(0) usually puts index 0 at 12 o'clock, 
+            // BUT our segments setup might differ. 
+            // In the render: index 0 is at 0 degrees.
+            // If we rotate 90 deg clockwise, index 0 moves to 3 o'clock. 
+            // The pointer is at 12 o'clock. 
+            // So we need the segment that is at 0 degrees relative to the wheel's new position.
+            // Which is (360 - degreesRotated).
+
+            const segmentAngle = 360 / segments.length;
+            const winningIndex = Math.floor(((360 - degreesRotated) % 360) / segmentAngle);
+
+            setWinningResult(segments[winningIndex]);
+
         }, 5000);
     };
 
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
-            <div className="max-w-4xl w-full bg-white rounded-3xl shadow-2xl p-8 flex flex-col md:flex-row items-center gap-12">
+            <div className="max-w-4xl w-full bg-white rounded-3xl shadow-2xl p-8 flex flex-col md:flex-row items-center gap-12 relative overflow-hidden">
+
+                {/* Result Overlay */}
+                {winningResult && (
+                    <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-300">
+                        <div className="bg-white rounded-2xl p-8 max-w-sm w-full text-center shadow-2xl transform scale-100 animate-in zoom-in-95 duration-200">
+                            <div className="mb-4 text-6xl">
+                                {winningResult.type === 'win' ? '🎉' : '😢'}
+                            </div>
+                            <h2 className="text-3xl font-bold text-gray-900 mb-2">
+                                {winningResult.type === 'win' ? 'Congratulations!' : 'So Close!'}
+                            </h2>
+                            <p className="text-gray-600 mb-6 text-lg">
+                                {winningResult.type === 'win'
+                                    ? `You won ${winningResult.text}!`
+                                    : 'Better luck next time!'}
+                            </p>
+
+                            {winningResult.type === 'win' && winningResult.code && (
+                                <div className="bg-gray-100 p-4 rounded-xl mb-6 border-2 border-dashed border-gray-300">
+                                    <p className="text-sm text-gray-500 mb-1 uppercase tracking-wide font-semibold">Your Coupon Code</p>
+                                    <div className="text-2xl font-mono font-bold text-blue-600 tracking-wider select-all">
+                                        {winningResult.code}
+                                    </div>
+                                </div>
+                            )}
+
+                            <button
+                                onClick={() => setWinningResult(null)}
+                                className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-colors"
+                            >
+                                {winningResult.type === 'win' ? 'Awesome!' : 'Try Again'}
+                            </button>
+                        </div>
+                    </div>
+                )}
 
                 {/* Left Side: Text & Actions */}
                 <div className="flex-1 text-center md:text-left space-y-6">
@@ -120,120 +196,69 @@ const LuckWheelPage = () => {
                         onClick={spinWheel}
                         disabled={spinning}
                         className={`
-              px-10 py-4 rounded-full text-xl font-bold shadow-lg transform transition-all
-              ${spinning
+                            px-10 py-4 rounded-full text-xl font-bold shadow-lg transform transition-all
+                            ${spinning
                                 ? 'bg-gray-300 cursor-not-allowed scale-95'
                                 : 'bg-gradient-to-r from-purple-600 to-blue-600 text-white hover:scale-105 hover:shadow-xl active:scale-95'
                             }
-            `}
+                        `}
                     >
                         {spinning ? 'Spinning...' : 'SPIN NOW'}
                     </button>
                 </div>
 
                 {/* Right Side: The Wheel */}
-                <div className="relative flex-1 flex justify-center items-center">
+                <div className="relative flex-1 flex justify-center items-center py-8">
                     {/* Pointer */}
-                    <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-4 z-20 w-0 h-0 
-                border-l-[20px] border-l-transparent
-                border-r-[20px] border-r-transparent
-                border-t-[40px] border-t-red-500 filter drop-shadow-md">
+                    <div className="absolute top-8 left-1/2 transform -translate-x-1/2 -translate-y-2 z-20 w-0 h-0 
+                        border-l-[20px] border-l-transparent
+                        border-r-[20px] border-r-transparent
+                        border-t-[40px] border-t-red-500 filter drop-shadow-md">
                     </div>
 
                     {/* Wheel Container */}
-                    <div
-                        className="w-80 h-80 md:w-96 md:h-96 rounded-full border-8 border-white shadow-[0_0_50px_rgba(0,0,0,0.1)] overflow-hidden relative transition-transform duration-[5000ms] cubic-bezier(0.2, 0.8, 0.2, 1)"
-                        style={{ transform: `rotate(${rotation}deg)` }}
-                    >
-                        {segments.map((segment, index) => {
-                            const rotation = index * (360 / segments.length);
-                            return (
+                    <div className="relative w-80 h-80 md:w-96 md:h-96">
+                        <div
+                            className="w-full h-full rounded-full border-8 border-white shadow-[0_0_50px_rgba(0,0,0,0.1)] overflow-hidden transition-transform duration-[5000ms] cubic-bezier(0.2, 0.8, 0.2, 1)"
+                            style={{
+                                transform: `rotate(${rotation}deg)`,
+                                background: segments.length > 0 ? `conic-gradient(
+                                    ${segments.map((s, i) => `${s.color} ${i * (100 / segments.length)}% ${(i + 1) * (100 / segments.length)}%`).join(', ')}
+                                )` : '#eee'
+                            }}
+                        >
+                            {/* Lines separating segments */}
+                            {segments.map((_, i) => (
                                 <div
-                                    key={index}
-                                    className="absolute w-full h-full text-center origin-center"
-                                    style={{
-                                        backgroundColor: segmentColors[index % segmentColors.length],
-                                        transform: `rotate(${rotation}deg) skewY(-${90 - (360 / segments.length)}deg)`,
-                                        // This clipping method creates triangular segments
-                                        clipPath: 'polygon(0 0, 50% 50%, 0 0.01%, 100% 0, 100% 0.01%)' // This is tricky in pure CSS without conical gradient or specific clip-path helpers.
-                                        // Standard approach: Conic gradient or individual skewed divs.
-                                        // Let's use Conic Gradient for background and overlay text for simplicity, OR standard skewed divs.
-                                        // Better approach for React:
-                                    }}
-                                >
-                                </div>
-                            );
-                        })}
+                                    key={`line-${i}`}
+                                    className="absolute w-full h-1 bg-white/20 top-1/2 left-0 -translate-y-1/2 origin-center"
+                                    style={{ transform: `rotate(${i * (360 / segments.length)}deg)` }}
+                                />
+                            ))}
 
-                        {/* Better Wheel Structure: Conic Gradient Background + Text Overlay */}
-                        {/* Resetting the map above logic, doing simpler CSS approach inside this div */}
+                            {/* Text Labels */}
+                            {segments.map((seg, i) => {
+                                const angle = i * (360 / segments.length) + (360 / segments.length) / 2;
+                                return (
+                                    <div
+                                        key={`label-${i}`}
+                                        className="absolute top-0 left-1/2 h-1/2 flex items-start justify-center pt-8 origin-bottom"
+                                        style={{
+                                            transform: `translateX(-50%) rotate(${angle}deg)`,
+                                        }}
+                                    >
+                                        <span className="text-white font-bold text-sm md:text-base drop-shadow-md select-none max-w-[80px] text-center leading-tight">
+                                            {seg.text}
+                                        </span>
+                                    </div>
+                                )
+                            })}
+                        </div>
+                        {/* Center Cap */}
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 bg-white rounded-full shadow-lg z-10 flex items-center justify-center">
+                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-blue-500"></div>
+                        </div>
                     </div>
-
-                    {/* The Actual Wheel Implementation using Conic Gradient for ease */}
-                    <div
-                        className="absolute w-80 h-80 md:w-96 md:h-96 rounded-full overflow-hidden transition-transform duration-[5000ms] cubic-bezier(0.2, 0.8, 0.2, 1)"
-                        style={{
-                            transform: `rotate(${rotation}deg)`,
-                            background: `conic-gradient(
-                   ${segments.map((_, i) => `${segmentColors[i]} ${i * (100 / segments.length)}% ${(i + 1) * (100 / segments.length)}%`).join(', ')}
-                 )`
-                        }}
-                    >
-                        {/* Lines separating segments */}
-                        {segments.map((_, i) => (
-                            <div
-                                key={`line-${i}`}
-                                className="absolute w-full h-1 bg-white/20 top-1/2 left-0 -translate-y-1/2 origin-center"
-                                style={{ transform: `rotate(${i * (360 / segments.length)}deg)` }}
-                            />
-                        ))}
-
-                        {/* Text Labels */}
-                        {segments.map((seg, i) => (
-                            <div
-                                key={`text-${i}`}
-                                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-full text-white font-bold text-sm md:text-base pt-8"
-                                style={{
-                                    transform: `rotate(${i * (360 / segments.length) + (360 / segments.length) / 2}deg)`,
-                                    transformOrigin: 'center center'
-                                }}
-                            >
-                                <span className="block transform -translate-y-36 rotate-180" style={{ writingMode: 'vertical-rl' }}>
-                                    {/* Adjust text positioning */}
-                                </span>
-                                <div
-                                    className="absolute top-4 left-1/2 -translate-x-1/2"
-                                >
-                                    {/* Vertical text isn't great for legibility. Let's try standard radial text placement. */}
-                                </div>
-                            </div>
-                        ))}
-
-                        {/* Improved Text Placement */}
-                        {segments.map((seg, i) => {
-                            const angle = i * (360 / segments.length) + (360 / segments.length) / 2; // Center of the segment
-                            return (
-                                <div
-                                    key={`label-${i}`}
-                                    className="absolute top-0 left-1/2 h-1/2 flex items-start justify-center pt-8 origin-bottom"
-                                    style={{
-                                        transform: `translateX(-50%) rotate(${angle}deg)`,
-                                    }}
-                                >
-                                    <span className="text-white font-bold text-sm md:text-base drop-shadow-md select-none">
-                                        {seg}
-                                    </span>
-                                </div>
-                            )
-                        })}
-
-                    </div>
-
-                    {/* Center Cap */}
-                    <div className="absolute w-12 h-12 bg-white rounded-full shadow-lg z-10 flex items-center justify-center">
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-blue-500"></div>
-                    </div>
-
                 </div>
             </div>
         </div>
