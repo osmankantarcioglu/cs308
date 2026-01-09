@@ -1,4 +1,4 @@
-import { Routes, Route, useLocation} from "react-router-dom";
+import { Routes, Route, useLocation } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import { CartProvider } from "./context/CartContext";
 import { WishlistProvider } from "./context/WishlistContext";
@@ -39,6 +39,7 @@ import CustomerChatWidget from "./components/CustomerChatWidget";
 import CategoriesPage from "./pages/CategoriesPage";
 import CompareBar from "./components/CompareBar";
 import ComparePage from "./pages/ComparePage";
+import LuckWheelPage from "./pages/LuckWheelPage";
 
 export default function App() {
   const location = useLocation();
@@ -50,47 +51,48 @@ export default function App() {
           <div className="min-h-screen bg-gray-50">
             <Navbar />
             <Routes>
-          <Route
-            path="/"
-            element={
-              <main>
-                <HeroSection />
-                <Categories />
-                <FeaturedProducts />
-                <ProductProperties />
-                <ProductComments />
-                <DealsSection />
-              </main>
-            }
-          />
-          <Route path="/products" element={<ProductsPage />} />
-          <Route path="/categories" element={<CategoriesPage />} />
-          <Route path="/products/:id" element={<ProductDetailPage />} />
-          <Route path="/basket" element={<BasketPage />} />
-          <Route path="/wishlist" element={<WishlistPage />} />
-          <Route path="/profile" element={<ProfilePage />} />
-          <Route path="/checkout" element={<CheckoutPage />} />
-          <Route path="/checkout/success" element={<CheckoutSuccessPage />} />
-          <Route path="/about" element={<AboutPage />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
-          <Route path="/privacy" element={<PrivacyPolicyPage />} />
-          <Route path="/terms" element={<TermsOfServicePage />} />
-          <Route path="/cookies" element={<CookiePolicyPage />} />
-          <Route path="/admin" element={<AdminLoginPage />} />
-          <Route path="/admin/dashboard" element={<AdminRoute><AdminPage /></AdminRoute>} />
-          <Route path="/product-manager" element={<ProductManagerLoginPage />} />
-          <Route path="/product-manager/dashboard" element={<ProductManagerRoute><ProductManagerDashboard /></ProductManagerRoute>} />
-          <Route path="/sales-manager" element={<SalesManagerLoginPage />} />
-          <Route path="/sales-manager/dashboard" element={<SalesManagerRoute><SalesManagerDashboard /></SalesManagerRoute>} />
-          <Route path="/support" element={<SupportAgentLoginPage />} />
-          <Route path="/support/dashboard" element={<SupportAgentRoute><SupportAgentDashboard /></SupportAgentRoute>} />
-          <Route path="/compare" element={<ComparePage />} />
+              <Route
+                path="/"
+                element={
+                  <main>
+                    <HeroSection />
+                    <Categories />
+                    <FeaturedProducts />
+                    <ProductProperties />
+                    <ProductComments />
+                    <DealsSection />
+                  </main>
+                }
+              />
+              <Route path="/products" element={<ProductsPage />} />
+              <Route path="/categories" element={<CategoriesPage />} />
+              <Route path="/products/:id" element={<ProductDetailPage />} />
+              <Route path="/basket" element={<BasketPage />} />
+              <Route path="/wishlist" element={<WishlistPage />} />
+              <Route path="/profile" element={<ProfilePage />} />
+              <Route path="/checkout" element={<CheckoutPage />} />
+              <Route path="/checkout/success" element={<CheckoutSuccessPage />} />
+              <Route path="/about" element={<AboutPage />} />
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/register" element={<RegisterPage />} />
+              <Route path="/privacy" element={<PrivacyPolicyPage />} />
+              <Route path="/terms" element={<TermsOfServicePage />} />
+              <Route path="/cookies" element={<CookiePolicyPage />} />
+              <Route path="/admin" element={<AdminLoginPage />} />
+              <Route path="/admin/dashboard" element={<AdminRoute><AdminPage /></AdminRoute>} />
+              <Route path="/product-manager" element={<ProductManagerLoginPage />} />
+              <Route path="/product-manager/dashboard" element={<ProductManagerRoute><ProductManagerDashboard /></ProductManagerRoute>} />
+              <Route path="/sales-manager" element={<SalesManagerLoginPage />} />
+              <Route path="/sales-manager/dashboard" element={<SalesManagerRoute><SalesManagerDashboard /></SalesManagerRoute>} />
+              <Route path="/support" element={<SupportAgentLoginPage />} />
+              <Route path="/support/dashboard" element={<SupportAgentRoute><SupportAgentDashboard /></SupportAgentRoute>} />
+              <Route path="/compare" element={<ComparePage />} />
+              <Route path="/luck-wheel" element={<LuckWheelPage />} />
             </Routes>
             {!isComparePage && <CompareBar />}
             {!isComparePage && <CustomerChatWidget />}
             {!isComparePage && <Footer />}
-            
+
           </div>
         </WishlistProvider>
       </CartProvider>

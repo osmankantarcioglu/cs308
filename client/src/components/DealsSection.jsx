@@ -1,4 +1,8 @@
+import { useNavigate } from 'react-router-dom';
+
 export default function DealsSection() {
+  const navigate = useNavigate();
+
   return (
     <section className="py-16 bg-white">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
@@ -30,21 +34,28 @@ export default function DealsSection() {
 
           {/* Deal 2 & 3 - Stacked Cards */}
           <div className="space-y-6">
-            {/* Deal 2 */}
-            <div className="relative bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl overflow-hidden p-8">
+            {/* Deal 2 - Luck Wheel Promo */}
+            <div className="relative bg-gradient-to-br from-purple-500 to-pink-600 rounded-2xl overflow-hidden p-8 cursor-pointer hover:shadow-lg transition-shadow"
+              onClick={() => navigate('/luck-wheel')}>
               <div className="relative z-10 text-white">
                 <div className="inline-block bg-white/20 backdrop-blur-sm px-4 py-2 rounded-full text-sm font-semibold mb-3">
-                  Flash Sale
+                  Daily Reward
                 </div>
                 <h3 className="text-2xl font-bold mb-3">
-                  Gaming Gear Sale
+                  Spin & Win!
                 </h3>
                 <p className="text-white/90 mb-4">
-                  Save big on gaming accessories
+                  Try your luck for exclusive discounts & points
                 </p>
-                <button className="px-6 py-2.5 bg-white text-orange-600 font-semibold rounded-lg hover:bg-gray-100 transition-colors">
-                  Shop Now
+                <button className="px-6 py-2.5 bg-white text-pink-600 font-semibold rounded-lg hover:bg-gray-100 transition-colors">
+                  Spin Now
                 </button>
+              </div>
+              {/* Decorative circle/wheel hint */}
+              <div className="absolute right-[-20px] bottom-[-20px] opacity-20 animate-spin" style={{ animationDuration: '10s' }}>
+                <svg width="120" height="120" viewBox="0 0 100 100" fill="none" stroke="currentColor" strokeWidth="8" className="text-white">
+                  <circle cx="50" cy="50" r="40" strokeDasharray="60 10" />
+                </svg>
               </div>
             </div>
 
