@@ -20,59 +20,53 @@ const LuckWheelPage = () => {
         '#3498DB', // Dark Blue
     ];
 
-    // Shuffle function
-    const shuffleArray = (array) => {
-        for (let i = array.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [array[i], array[j]] = [array[j], array[i]];
-        }
-        return array;
-    };
+
 
     useEffect(() => {
         const fetchCoupons = async () => {
             try {
                 const res = await fetch('http://localhost:3000/coupons');
                 const data = await res.json();
-                let initialSegments = [];
+
+                // Initialize 8 segments as 'Out of Luck'
+                let wheelSegments = Array(8).fill(null).map(() => ({
+                    text: 'Out of Luck',
+                    type: 'loss'
+                }));
 
                 if (data.success && data.data) {
                     const availableCoupons = data.data;
+                    const count = Math.min(availableCoupons.length, 6); // Max 6 coupons
 
-                    if (availableCoupons.length > 6) {
-                        // Take first 6 coupons
-                        initialSegments = availableCoupons.slice(0, 6).map(c => ({
-                            text: `${c.discount_rate}% OFF`,
-                            code: c.code,
+                    // User specified mapping (1-based -> 0-based array index)
+                    // 1st coupon -> Index 0 (1)
+                    // 2nd coupon -> Index 2 (3)
+                    // 3rd coupon -> Index 4 (5)
+                    // 4th coupon -> Index 6 (7)
+                    // 5th coupon -> Index 7 (8)
+                    // 6th coupon -> Index 1 (2)
+                    const placementIndices = [0, 2, 4, 6, 7, 1];
+
+                    for (let i = 0; i < count; i++) {
+                        const coupon = availableCoupons[i];
+                        const targetIndex = placementIndices[i];
+
+                        wheelSegments[targetIndex] = {
+                            text: `${coupon.discount_rate}% OFF`,
+                            code: coupon.code,
                             type: 'win'
-                        }));
-                        // Add 2 'Out of Luck'
-                        initialSegments.push({ text: 'Out of Luck', type: 'loss' });
-                        initialSegments.push({ text: 'Out of Luck', type: 'loss' });
-                    } else {
-                        // Take all coupons
-                        initialSegments = availableCoupons.map(c => ({
-                            text: `${c.discount_rate}% OFF`,
-                            code: c.code,
-                            type: 'win'
-                        }));
-                        // Fill the rest with 'Out of Luck' until 8
-                        while (initialSegments.length < 8) {
-                            initialSegments.push({ text: 'Out of Luck', type: 'loss' });
-                        }
+                        };
                     }
                 } else {
-                    // Fallback
-                    initialSegments = Array(8).fill(null).map((_, i) =>
-                        i % 2 === 0 ? { text: 'Try Again', type: 'loss' } : { text: 'No Luck', type: 'loss' }
-                    );
+                    // Fallback if no data, purely decorative
+                    wheelSegments = Array(8).fill(null).map((_, i) => ({
+                        text: i % 2 === 0 ? 'Try Again' : 'No Luck',
+                        type: 'loss'
+                    }));
                 }
 
-                // Shuffle the segments to separate coupons
-                initialSegments = shuffleArray(initialSegments);
-
-                // Assign colors sequentially after shuffle so the wheel looks nice
-                const finalSegments = initialSegments.map((seg, i) => ({
+                // Assign colors sequentially
+                const finalSegments = wheelSegments.map((seg, i) => ({
                     ...seg,
                     color: segmentColors[i % segmentColors.length]
                 }));
