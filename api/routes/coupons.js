@@ -54,5 +54,36 @@ router.get("/validate", async (req, res, next) => {
     next(err);
   }
 });
+const { authenticate } = require("../lib/auth");
+
+router.post("/spin", authenticate, async (req, res, next) => {
+  try {
+    const user = req.user;
+    const now = new Date();
+
+    // Calculate eligibility
+    if (user.last_spin_at) {
+      const lastSpin = new Date(user.last_spin_at);
+      const nextSpin = new Date(lastSpin.getTime() + 7 * 24 * 60 * 60 * 1000); // +7 days
+
+      if (now < nextSpin) {
+        return res.status(403).json({
+          success: false,
+          message: "You must wait before spinning again.",
+          nextSpinAt: nextSpin
+        });
+      }
+    }
+
+    // Update user
+    req.user.last_spin_at = now;
+    await req.user.save();
+
+    res.json({ success: true, message: "Spin allowed", lastSpinAt: now });
+
+  } catch (err) {
+    next(err);
+  }
+});
 
 module.exports = router;
