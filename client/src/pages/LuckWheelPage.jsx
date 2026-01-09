@@ -1,9 +1,10 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const LuckWheelPage = () => {
     const [spinning, setSpinning] = useState(false);
+    const [segments, setSegments] = useState(['Loading...', 'Loading...', 'Loading...', 'Loading...', 'Loading...', 'Loading...', 'Loading...', 'Loading...']);
     const [rotation, setRotation] = useState(0);
     const [winningSegment, setWinningSegment] = useState(null);
     const navigate = useNavigate();
@@ -20,16 +21,46 @@ const LuckWheelPage = () => {
         '#3498DB', // Dark Blue
     ];
 
-    const segments = [
-        '10% OFF',
-        'Free Ship',
-        '50 Points',
-        'Try Again',
-        '20% OFF',
-        'Mystery',
-        '100 Points',
-        'No Luck'
-    ];
+    useEffect(() => {
+        const fetchCoupons = async () => {
+            try {
+                const res = await fetch('http://localhost:3000/coupons');
+                const data = await res.json();
+
+                if (data.success && data.data) {
+                    const availableCoupons = data.data;
+                    let newSegments = [];
+
+                    if (availableCoupons.length > 6) {
+                        // Take first 6 coupons
+                        const selectedCoupons = availableCoupons.slice(0, 6);
+                        newSegments = selectedCoupons.map(c => `${c.discount_rate}% OFF`);
+                        // Add 2 'Out of Luck'
+                        newSegments.push('Out of Luck');
+                        newSegments.push('Out of Luck');
+                    } else {
+                        // Take all coupons
+                        newSegments = availableCoupons.map(c => `${c.discount_rate}% OFF`);
+                        // Fill the rest with 'Out of Luck' until 8
+                        while (newSegments.length < 8) {
+                            newSegments.push('Out of Luck');
+                        }
+                    }
+                    setSegments(newSegments);
+                } else {
+                    // Fallback if no data
+                    setSegments(['Try Again', 'No Luck', 'Try Again', 'No Luck', 'Try Again', 'No Luck', 'Try Again', 'No Luck']);
+                }
+            } catch (err) {
+                console.error("Failed to fetch coupons", err);
+                setSegments(['Try Again', 'No Luck', 'Try Again', 'No Luck', 'Try Again', 'No Luck', 'Try Again', 'No Luck']);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchCoupons();
+    }, []);
 
     const spinWheel = () => {
         if (spinning) return;
@@ -180,7 +211,7 @@ const LuckWheelPage = () => {
 
                         {/* Improved Text Placement */}
                         {segments.map((seg, i) => {
-                            const angle = i * 45 + 22.5; // Center of the segment
+                            const angle = i * (360 / segments.length) + (360 / segments.length) / 2; // Center of the segment
                             return (
                                 <div
                                     key={`label-${i}`}

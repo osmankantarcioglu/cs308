@@ -2,6 +2,22 @@ const express = require("express");
 const router = express.Router();
 const Coupon = require("../db/models/Coupon");
 
+router.get("/", async (req, res, next) => {
+  try {
+    const coupons = await Coupon.find({
+      is_active: true,
+      $or: [
+        { expires_at: { $gt: new Date() } },
+        { expires_at: null }
+      ]
+    }).select('code discount_rate');
+
+    res.json({ success: true, count: coupons.length, data: coupons });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get("/validate", async (req, res, next) => {
   try {
     const code = String(req.query.code || "").trim().toUpperCase();
