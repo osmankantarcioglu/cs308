@@ -2,16 +2,16 @@ const mongoose = require("mongoose");
 const Enum = require("../../config/Enum");
 
 const schema = mongoose.Schema({
-    email: { 
-        type: String, 
+    email: {
+        type: String,
         required: true,
         unique: true,
         lowercase: true,
         trim: true
     },
-    password: { 
-        type: String, 
-        required: true 
+    password: {
+        type: String,
+        required: true
     },
     role: {
         type: String,
@@ -24,16 +24,16 @@ const schema = mongoose.Schema({
         ],
         default: Enum.USER_ROLES.CUSTOMER
     },
-    first_name: { 
-        type: String, 
-        required: true 
+    first_name: {
+        type: String,
+        required: true
     },
-    last_name: { 
-        type: String, 
-        required: true 
+    last_name: {
+        type: String,
+        required: true
     },
-    phone_number: { 
-        type: String 
+    phone_number: {
+        type: String
     },
     taxID: {
         type: String,
@@ -43,21 +43,25 @@ const schema = mongoose.Schema({
     home_address: {
         type: String
     },
-    is_active: { 
-        type: Boolean, 
-        default: true 
+    is_active: {
+        type: Boolean,
+        default: true
     },
-    created_by: { 
+    created_by: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "users"
     },
-    updated_by: { 
+    updated_by: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "users"
     },
-    language: { 
-        type: String, 
-        default: Enum.LANG.en 
+    language: {
+        type: String,
+        default: Enum.LANG.en
+    },
+    last_spin_at: {
+        type: Date,
+        default: null
     }
 }, {
     versionKey: false,

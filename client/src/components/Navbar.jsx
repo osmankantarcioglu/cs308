@@ -69,7 +69,7 @@ export default function Navbar() {
             <Link to="/products" className="text-gray-700 hover:text-primary font-medium transition-colors">
               Products
             </Link>
-            <Link to="/deals" className="text-gray-700 hover:text-primary font-medium transition-colors">
+            <Link to="/luck-wheel" className="text-gray-700 hover:text-primary font-medium transition-colors">
               Deals
             </Link>
             <Link to="/categories" className="text-gray-700 hover:text-primary font-medium transition-colors">
@@ -109,7 +109,7 @@ export default function Navbar() {
 
           {/* Actions */}
           <div className="flex items-center space-x-4">
-            <button 
+            <button
               onClick={handleProfileClick}
               className="hidden md:flex items-center space-x-1 text-gray-700 hover:text-primary transition-colors"
               title={isAuthenticated ? `Profile - ${user?.first_name || 'User'}` : 'Login'}
@@ -118,7 +118,7 @@ export default function Navbar() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
               </svg>
             </button>
-            <button 
+            <button
               onClick={handleWishlistClick}
               className="hidden md:flex relative items-center space-x-1 text-gray-700 hover:text-primary transition-colors"
               title="Wishlist"
@@ -166,7 +166,7 @@ export default function Navbar() {
               <Link to="/products" className="text-gray-700 hover:text-primary font-medium">
                 Products
               </Link>
-              <Link to="/deals" className="text-gray-700 hover:text-primary font-medium">
+              <Link to="/luck-wheel" className="text-gray-700 hover:text-primary font-medium">
                 Deals
               </Link>
               <Link to="/categories" className="text-gray-700 hover:text-primary font-medium">

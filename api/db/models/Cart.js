@@ -45,17 +45,17 @@ class Cart extends mongoose.Model {
     }
 
     static findBySession(sessionId) {
-        return this.findOne({ session_id: sessionId, is_active: true });
+        return this.findOne({ session_id: sessionId, is_active: true, user_id: null });
     }
 
     static async addItemToCart(sessionId, userId, productId, quantity, price) {
-        const query = userId 
+        const query = userId
             ? { user_id: userId, is_active: true }
-            : { session_id: sessionId, is_active: true };
-        
+            : { session_id: sessionId, is_active: true, user_id: null };
+
         // First, find the cart
         let cart = await this.findOne(query);
-        
+
         if (!cart) {
             // Create new cart
             cart = new this({
@@ -65,12 +65,12 @@ class Cart extends mongoose.Model {
                 is_active: true
             });
         }
-        
+
         // Check if product already exists in cart
         const existingItemIndex = cart.items.findIndex(
             item => item.product_id.toString() === productId.toString()
         );
-        
+
         if (existingItemIndex >= 0) {
             // Product exists, update quantity
             cart.items[existingItemIndex].quantity += quantity;
@@ -82,16 +82,16 @@ class Cart extends mongoose.Model {
                 price_at_time: price
             });
         }
-        
+
         await cart.save();
         return cart;
     }
 
     static updateItemQuantity(sessionId, userId, productId, quantity) {
-        const query = userId 
+        const query = userId
             ? { user_id: userId, is_active: true, 'items.product_id': productId }
-            : { session_id: sessionId, is_active: true, 'items.product_id': productId };
-        
+            : { session_id: sessionId, is_active: true, 'items.product_id': productId, user_id: null };
+
         return this.findOneAndUpdate(
             query,
             {
@@ -104,10 +104,10 @@ class Cart extends mongoose.Model {
     }
 
     static removeItemFromCart(sessionId, userId, productId) {
-        const query = userId 
+        const query = userId
             ? { user_id: userId, is_active: true }
-            : { session_id: sessionId, is_active: true };
-        
+            : { session_id: sessionId, is_active: true, user_id: null };
+
         return this.findOneAndUpdate(
             query,
             {
@@ -120,10 +120,10 @@ class Cart extends mongoose.Model {
     }
 
     static clearCart(sessionId, userId) {
-        const query = userId 
+        const query = userId
             ? { user_id: userId, is_active: true }
-            : { session_id: sessionId, is_active: true };
-        
+            : { session_id: sessionId, is_active: true, user_id: null };
+
         return this.findOneAndUpdate(
             query,
             { is_active: false },
@@ -159,7 +159,7 @@ class Cart extends mongoose.Model {
         // Merge items: combine quantities for same products, add new products
         // Create a map to track products and their quantities
         const productMap = new Map();
-        
+
         // First, add all user cart items to the map
         userCart.items.forEach(item => {
             const productIdStr = item.product_id.toString();
