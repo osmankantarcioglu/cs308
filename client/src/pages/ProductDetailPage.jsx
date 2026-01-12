@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
 import { useWishlist } from "../context/WishlistContext";
+import ShareButton from "../components/ShareButton";
 
 const API_BASE_URL = "http://localhost:3000/products";
 
@@ -527,7 +528,10 @@ export default function ProductDetailPage() {
                 <div className="text-sm text-gray-500 mb-2">
                   {product.category?.name || "Uncategorized"}
                 </div>
-                <h1 className="text-3xl font-bold text-gray-900 mb-4">{product.name}</h1>
+                <div className="flex items-start justify-between gap-4 mb-4">
+                  <h1 className="text-3xl font-bold text-gray-900 flex-1">{product.name}</h1>
+                  <ShareButton product={product} />
+                </div>
                 
                 {/* Price */}
                 <div className="mb-6">
@@ -985,4 +989,3 @@ export default function ProductDetailPage() {
     </div>
   );
 }
-
