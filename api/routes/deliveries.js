@@ -56,7 +56,7 @@ router.get('/', async function(req, res, next) {
             Delivery.find(query)
                 .populate('customer_id', 'first_name last_name email phone_number')
                 .populate('product_id', 'name sku')
-                .populate('order_id', 'order_number delivery_address')
+                .populate('order_id', 'order_number delivery_address status')
                 .sort({ updatedAt: -1 })
                 .skip(skip)
                 .limit(limitNum),
@@ -144,7 +144,7 @@ router.patch('/:id/status', async function(req, res, next) {
             data: await Delivery.findById(delivery._id)
                 .populate('customer_id', 'first_name last_name email phone_number')
                 .populate('product_id', 'name sku')
-                .populate('order_id', 'order_number')
+                .populate('order_id', 'order_number status')
         });
     } catch (error) {
         if (error.name === 'CastError') {

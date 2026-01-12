@@ -344,6 +344,13 @@ export default function ProfilePage() {
          
           <div className="grid md:grid-cols-2 gap-6">
             <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">User ID</label>
+              <div className="px-4 py-3 bg-gray-50 rounded-lg text-gray-900">
+                {user?._id || 'N/A'}
+              </div>
+            </div>
+
+            <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">First Name</label>
               <div className="px-4 py-3 bg-gray-50 rounded-lg text-gray-900">
                 {user?.first_name || 'N/A'}

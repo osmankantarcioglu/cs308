@@ -703,7 +703,9 @@ export default function ProductManagerDashboard() {
               <div className="text-center py-16 text-slate-500">No deliveries match the selected filters.</div>
             ) : (
               <div className="space-y-4">
-                {deliveries.map((delivery) => (
+                {deliveries.map((delivery) => {
+                  const isOrderCancelled = delivery.order_id?.status === 'cancelled';
+                  return (
                   <div
                     key={delivery._id}
                     className="bg-slate-900 rounded-2xl p-5 border border-white/5 hover:border-indigo-500/40 transition"
@@ -714,8 +716,8 @@ export default function ProductManagerDashboard() {
                         <p className="text-lg font-semibold text-white font-mono">{delivery._id}</p>
                       </div>
                       <div className="flex items-center gap-3">
-                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${STATUS_STYLES[delivery.status] || STATUS_STYLES.pending}`}>
-                          {delivery.status === 'delivered' ? 'Completed' : delivery.status.replace("-", " ")}
+                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${isOrderCancelled ? STATUS_STYLES.cancelled : (STATUS_STYLES[delivery.status] || STATUS_STYLES.pending)}`}>
+                          {isOrderCancelled ? 'Cancelled' : (delivery.status === 'delivered' ? 'Completed' : delivery.status.replace("-", " "))}
                         </span>
                       </div>
                     </div>
@@ -747,30 +749,39 @@ export default function ProductManagerDashboard() {
                       </div>
                       <div>
                         <p className="text-slate-500 text-xs uppercase tracking-widest mb-1">Delivery Status</p>
-                        <p className={`font-semibold ${delivery.status === 'delivered' ? 'text-emerald-400' : delivery.status === 'failed' ? 'text-rose-400' : 'text-amber-400'}`}>
-                          {delivery.status === 'delivered' ? '✓ Completed' : delivery.status === 'pending' ? '⏳ Pending' : delivery.status === 'in-transit' ? '🚚 In Transit' : '✗ Failed'}
-                        </p>
+                        {isOrderCancelled ? (
+                          <p className="font-semibold text-rose-400">
+                            ✗ Cancelled
+                          </p>
+                        ) : (
+                          <p className={`font-semibold ${delivery.status === 'delivered' ? 'text-emerald-400' : delivery.status === 'failed' ? 'text-rose-400' : 'text-amber-400'}`}>
+                            {delivery.status === 'delivered' ? '✓ Completed' : delivery.status === 'pending' ? '⏳ Pending' : delivery.status === 'in-transit' ? '🚚 In Transit' : '✗ Failed'}
+                          </p>
+                        )}
                       </div>
                     </div>
 
-                    <div className="mt-4 flex flex-wrap items-center gap-3">
-                      <label className="text-xs uppercase tracking-[0.3em] text-slate-500">
-                        Update Status
-                      </label>
-                      <select
-                        className="bg-slate-800 text-slate-200 px-4 py-2 rounded-2xl border border-white/5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        value={delivery.status}
-                        onChange={(e) => handleDeliveryStatusChange(delivery._id, e.target.value)}
-                      >
-                        {DELIVERY_STATUS_OPTIONS.filter((opt) => opt.value !== "all").map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                    {!isOrderCancelled && (
+                      <div className="mt-4 flex flex-wrap items-center gap-3">
+                        <label className="text-xs uppercase tracking-[0.3em] text-slate-500">
+                          Update Status
+                        </label>
+                        <select
+                          className="bg-slate-800 text-slate-200 px-4 py-2 rounded-2xl border border-white/5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          value={delivery.status}
+                          onChange={(e) => handleDeliveryStatusChange(delivery._id, e.target.value)}
+                        >
+                          {DELIVERY_STATUS_OPTIONS.filter((opt) => opt.value !== "all").map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 
