@@ -69,8 +69,31 @@ export default function Navbar() {
             <Link to="/products" className="text-gray-700 hover:text-primary font-medium transition-colors">
               Products
             </Link>
-            <Link to="/luck-wheel" className="text-gray-700 hover:text-primary font-medium transition-colors">
-              Deals
+            <Link to="/luck-wheel" className="flex items-center space-x-2 bg-gradient-to-r from-yellow-400 via-orange-500 to-red-500 bg-clip-text text-transparent font-bold text-lg hover:scale-105 transition-transform">
+              <svg className="w-6 h-6" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                {/* Slot Machine Body */}
+                <rect x="10" y="15" width="80" height="70" rx="5" fill="#C0C0C0" stroke="#888" strokeWidth="2"/>
+                {/* Top Section */}
+                <rect x="15" y="20" width="70" height="8" rx="2" fill="#FFA500"/>
+                <circle cx="50" cy="24" r="2" fill="#FF0000"/>
+                {/* Reels Container */}
+                <rect x="20" y="32" width="60" height="40" rx="3" fill="#E0E0E0" stroke="#999" strokeWidth="1"/>
+                {/* Reel 1 */}
+                <rect x="25" y="37" width="15" height="30" rx="2" fill="#FFF"/>
+                <text x="32.5" y="57" fontSize="20" fontWeight="bold" fill="#FF0000" textAnchor="middle" dominantBaseline="middle">7</text>
+                {/* Reel 2 */}
+                <rect x="42.5" y="37" width="15" height="30" rx="2" fill="#FFF"/>
+                <text x="50" y="57" fontSize="20" fontWeight="bold" fill="#FF0000" textAnchor="middle" dominantBaseline="middle">7</text>
+                {/* Reel 3 */}
+                <rect x="60" y="37" width="15" height="30" rx="2" fill="#FFF"/>
+                <text x="67.5" y="57" fontSize="20" fontWeight="bold" fill="#FF0000" textAnchor="middle" dominantBaseline="middle">7</text>
+                {/* Lever */}
+                <rect x="75" y="45" width="8" height="20" rx="2" fill="#C0C0C0" stroke="#888" strokeWidth="1"/>
+                <circle cx="79" cy="65" r="3" fill="#FF0000"/>
+                {/* Lever Handle */}
+                <line x1="83" y1="65" x2="90" y2="60" stroke="#888" strokeWidth="2" strokeLinecap="round"/>
+              </svg>
+              <span>Deals</span>
             </Link>
             <Link to="/categories" className="text-gray-700 hover:text-primary font-medium transition-colors">
               Categories
@@ -166,8 +189,31 @@ export default function Navbar() {
               <Link to="/products" className="text-gray-700 hover:text-primary font-medium">
                 Products
               </Link>
-              <Link to="/luck-wheel" className="text-gray-700 hover:text-primary font-medium">
-                Deals
+              <Link to="/luck-wheel" className="flex items-center space-x-2 bg-gradient-to-r from-yellow-400 via-orange-500 to-red-500 bg-clip-text text-transparent font-bold text-lg">
+                <svg className="w-6 h-6" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  {/* Slot Machine Body */}
+                  <rect x="10" y="15" width="80" height="70" rx="5" fill="#C0C0C0" stroke="#888" strokeWidth="2"/>
+                  {/* Top Section */}
+                  <rect x="15" y="20" width="70" height="8" rx="2" fill="#FFA500"/>
+                  <circle cx="50" cy="24" r="2" fill="#FF0000"/>
+                  {/* Reels Container */}
+                  <rect x="20" y="32" width="60" height="40" rx="3" fill="#E0E0E0" stroke="#999" strokeWidth="1"/>
+                  {/* Reel 1 */}
+                  <rect x="25" y="37" width="15" height="30" rx="2" fill="#FFF"/>
+                  <text x="32.5" y="57" fontSize="20" fontWeight="bold" fill="#FF0000" textAnchor="middle" dominantBaseline="middle">7</text>
+                  {/* Reel 2 */}
+                  <rect x="42.5" y="37" width="15" height="30" rx="2" fill="#FFF"/>
+                  <text x="50" y="57" fontSize="20" fontWeight="bold" fill="#FF0000" textAnchor="middle" dominantBaseline="middle">7</text>
+                  {/* Reel 3 */}
+                  <rect x="60" y="37" width="15" height="30" rx="2" fill="#FFF"/>
+                  <text x="67.5" y="57" fontSize="20" fontWeight="bold" fill="#FF0000" textAnchor="middle" dominantBaseline="middle">7</text>
+                  {/* Lever */}
+                  <rect x="75" y="45" width="8" height="20" rx="2" fill="#C0C0C0" stroke="#888" strokeWidth="1"/>
+                  <circle cx="79" cy="65" r="3" fill="#FF0000"/>
+                  {/* Lever Handle */}
+                  <line x1="83" y1="65" x2="90" y2="60" stroke="#888" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+                <span>Deals</span>
               </Link>
               <Link to="/categories" className="text-gray-700 hover:text-primary font-medium">
                 Categories
