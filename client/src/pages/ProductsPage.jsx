@@ -380,6 +380,12 @@ export default function ProductsPage() {
                       Popular
                     </div>
                   )}
+                  {/* Limited Stock Badge */}
+                  {product.quantity !== undefined && product.quantity < 10 && product.quantity > 0 && (
+                    <div className="absolute bottom-4 right-4 bg-red-500 text-white text-xs font-bold px-3 py-1.5 rounded-full z-20 shadow-md">
+                      Limited Stock
+                    </div>
+                  )}
                 </div>
 
                 {/* Content */}

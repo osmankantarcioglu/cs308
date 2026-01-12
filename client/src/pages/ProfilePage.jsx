@@ -295,108 +295,180 @@ export default function ProfilePage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-purple-50 py-8">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl">
         {/* Header */}
         <div className="mb-8 flex items-center justify-between">
-          <div>
-            <h1 className="text-4xl font-bold text-gray-900 mb-2">My Account</h1>
-            <p className="text-gray-600">Manage your profile and orders</p>
+          <div className="flex items-center space-x-4">
+            <div className="w-16 h-16 bg-gradient-to-br from-primary via-purple-500 to-pink-500 rounded-2xl flex items-center justify-center shadow-lg transform hover:scale-105 transition-transform">
+              <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+            </div>
+            <div>
+              <h1 className="text-4xl font-bold bg-gradient-to-r from-primary via-purple-600 to-pink-600 bg-clip-text text-transparent mb-2">
+                My Account
+              </h1>
+              <p className="text-gray-600 font-medium">Manage your profile and orders</p>
+            </div>
           </div>
           <button
             onClick={handleLogout}
-            className="px-6 py-2 bg-red-500 text-white font-semibold rounded-lg hover:bg-red-600 transition-colors"
+            className="px-6 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white font-semibold rounded-xl hover:from-red-600 hover:to-red-700 transition-all shadow-lg hover:shadow-xl transform hover:scale-105 flex items-center space-x-2"
           >
-            Logout
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            <span>Logout</span>
           </button>
         </div>
 
         {/* Tabs */}
-        <div className="mb-6 border-b border-gray-200">
-          <nav className="flex space-x-8">
+        <div className="mb-6 bg-white rounded-2xl shadow-lg p-2">
+          <nav className="flex space-x-2">
             <button
               onClick={() => setActiveTab('profile')}
-              className={`pb-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+              className={`flex-1 py-3 px-6 rounded-xl font-semibold text-sm transition-all duration-300 ${
                 activeTab === 'profile'
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'bg-gradient-to-r from-primary to-purple-600 text-white shadow-lg transform scale-105'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
               }`}
             >
-              Profile Information
+              <div className="flex items-center justify-center space-x-2">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                <span>Profile Information</span>
+              </div>
             </button>
             <button
               onClick={() => setActiveTab('orders')}
-              className={`pb-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+              className={`flex-1 py-3 px-6 rounded-xl font-semibold text-sm transition-all duration-300 ${
                 activeTab === 'orders'
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'bg-gradient-to-r from-primary to-purple-600 text-white shadow-lg transform scale-105'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
               }`}
             >
-              My Orders ({orders.length})
+              <div className="flex items-center justify-center space-x-2">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                </svg>
+                <span>My Orders ({orders.length})</span>
+              </div>
             </button>
           </nav>
         </div>
 
         {/* Profile Tab */}
         {activeTab === 'profile' && (
-          <div className="bg-white rounded-xl shadow-sm p-6">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">Profile Information</h2>
+          <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100 transform transition-all hover:shadow-2xl">
+            <div className="flex items-center space-x-3 mb-8">
+              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+              </div>
+              <h2 className="text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
+                Profile Information
+              </h2>
+            </div>
          
           <div className="grid md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">User ID</label>
-              <div className="px-4 py-3 bg-gray-50 rounded-lg text-gray-900">
+            <div className="group">
+              <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center space-x-2">
+                <svg className="w-4 h-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
+                </svg>
+                <span>User ID</span>
+              </label>
+              <div className="px-4 py-3 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl text-gray-900 font-mono text-sm border border-gray-200 group-hover:border-primary transition-colors">
                 {user?._id || 'N/A'}
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">First Name</label>
-              <div className="px-4 py-3 bg-gray-50 rounded-lg text-gray-900">
+            <div className="group">
+              <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center space-x-2">
+                <svg className="w-4 h-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                <span>First Name</span>
+              </label>
+              <div className="px-4 py-3 bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl text-gray-900 font-medium border border-blue-100 group-hover:border-primary transition-colors">
                 {user?.first_name || 'N/A'}
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Last Name</label>
-              <div className="px-4 py-3 bg-gray-50 rounded-lg text-gray-900">
+            <div className="group">
+              <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center space-x-2">
+                <svg className="w-4 h-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                <span>Last Name</span>
+              </label>
+              <div className="px-4 py-3 bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl text-gray-900 font-medium border border-blue-100 group-hover:border-primary transition-colors">
                 {user?.last_name || 'N/A'}
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
-              <div className="px-4 py-3 bg-gray-50 rounded-lg text-gray-900">
+            <div className="group">
+              <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center space-x-2">
+                <svg className="w-4 h-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+                <span>Email</span>
+              </label>
+              <div className="px-4 py-3 bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl text-gray-900 font-medium border border-purple-100 group-hover:border-primary transition-colors">
                 {user?.email || 'N/A'}
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number</label>
-              <div className="px-4 py-3 bg-gray-50 rounded-lg text-gray-900">
+            <div className="group">
+              <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center space-x-2">
+                <svg className="w-4 h-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                </svg>
+                <span>Phone Number</span>
+              </label>
+              <div className="px-4 py-3 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl text-gray-900 font-medium border border-green-100 group-hover:border-primary transition-colors">
                 {user?.phone_number || 'N/A'}
               </div>
             </div>
 
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Home Address</label>
-              <div className="px-4 py-3 bg-gray-50 rounded-lg text-gray-900">
+            <div className="md:col-span-2 group">
+              <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center space-x-2">
+                <svg className="w-4 h-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span>Home Address</span>
+              </label>
+              <div className="px-4 py-3 bg-gradient-to-r from-orange-50 to-amber-50 rounded-xl text-gray-900 border border-orange-100 group-hover:border-primary transition-colors">
                 {user?.home_address || 'N/A'}
               </div>
             </div>
 
             {user?.taxID && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Tax ID</label>
-                <div className="px-4 py-3 bg-gray-50 rounded-lg text-gray-900">
+              <div className="group">
+                <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center space-x-2">
+                  <svg className="w-4 h-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <span>Tax ID</span>
+                </label>
+                <div className="px-4 py-3 bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl text-gray-900 font-medium border border-indigo-100 group-hover:border-primary transition-colors">
                   {user.taxID}
                 </div>
               </div>
             )}
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Account Type</label>
-              <div className="px-4 py-3 bg-gray-50 rounded-lg text-gray-900 capitalize">
+            <div className="group">
+              <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center space-x-2">
+                <svg className="w-4 h-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
+                <span>Account Type</span>
+              </label>
+              <div className="px-4 py-3 bg-gradient-to-r from-primary/10 to-purple-500/10 rounded-xl text-gray-900 font-semibold capitalize border border-primary/20 group-hover:border-primary transition-colors">
                 {user?.role || 'Customer'}
               </div>
             </div>
