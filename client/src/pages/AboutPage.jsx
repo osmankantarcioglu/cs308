@@ -219,7 +219,7 @@ export default function AboutPage() {
                 </div>
                 <div>
                   <h3 className="text-lg font-bold text-gray-900">Standard Shipping</h3>
-                  <p className="text-2xl font-bold text-blue-600 mt-1">$15.00</p>
+                  <p className="text-2xl font-bold text-blue-600 mt-1">$10.00</p>
                 </div>
               </div>
               <div className="space-y-2 text-sm text-gray-600">
