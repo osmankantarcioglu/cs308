@@ -2,11 +2,12 @@ name: CI - API Tests
 
 on:
   push:
-    branches:
-      - "**"
+    branches: ["**"]
   pull_request:
-    branches:
-      - main
+    branches: [main]
+
+permissions:
+  contents: read
 
 jobs:
   api-tests:
@@ -17,24 +18,41 @@ jobs:
         image: mongo:6
         ports:
           - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.runCommand({ ping: 1 })' || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Use Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: 18
+          cache: npm
+          cache-dependency-path: api/package-lock.json
 
       - name: Install API dependencies
         run: |
           cd api
-          npm install
+          npm ci
 
       - name: Run API tests
         env:
-          MONGO_URI: mongodb://localhost:27017/testdb
+          CONNECTION_STRING: ${{ secrets.CONNECTION_STRING }}
+          PORT: ${{ secrets.PORT }}
+          LOG_LEVEL: ${{ secrets.LOG_LEVEL }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          CLIENT_URL: ${{ secrets.CLIENT_URL }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          SMTP_FROM: ${{ secrets.SMTP_FROM }}
         run: |
           cd api
           npm test
